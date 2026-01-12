@@ -1,9 +1,10 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -41,6 +42,7 @@ class ATMTransaction(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    report_id: str
     no: int
     channel_type: str
     terminal_id: str
@@ -53,6 +55,18 @@ class ATMTransaction(BaseModel):
     biaya_gross: float
     proporsi_repay: float
     repay_nominal: float
+
+class ReportMeta(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    filename: str
+    period: str
+    bank_code: str
+    upload_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    total_terminals: int
+    total_transaksi_sukses: int
+    total_repay_nominal: float
 
 class ReportSummary(BaseModel):
     total_terminals: int
@@ -69,9 +83,100 @@ class ReportSummary(BaseModel):
     proporsi_distribution: dict
     period: str
     bank_code: str
+    report_id: Optional[str] = None
 
-# Sample data from the report (parsed from the file)
-REPORT_DATA = [
+
+def parse_number(value: str) -> int:
+    """Parse number from string, handling comma as thousand separator"""
+    if not value:
+        return 0
+    # Remove commas and convert to int
+    cleaned = value.replace(',', '').replace('.', '').strip()
+    try:
+        return int(cleaned)
+    except:
+        return 0
+
+def parse_float(value: str) -> float:
+    """Parse float from string"""
+    if not value:
+        return 0.0
+    # Handle Indonesian number format (dot as thousand, comma as decimal)
+    cleaned = value.replace('.', '').replace(',', '.').strip()
+    try:
+        return float(cleaned)
+    except:
+        return 0.0
+
+def parse_report_file(content: str) -> tuple:
+    """Parse report file content and extract transactions"""
+    lines = content.split('\n')
+    transactions = []
+    period = "Unknown"
+    bank_code = "Unknown"
+    
+    # Try to extract period and bank code from header
+    for line in lines[:20]:
+        if 'Desember' in line or 'Januari' in line or 'Februari' in line or 'Maret' in line or \
+           'April' in line or 'Mei' in line or 'Juni' in line or 'Juli' in line or \
+           'Agustus' in line or 'September' in line or 'Oktober' in line or 'November' in line:
+            # Extract month and year
+            match = re.search(r'(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s*(\d{4})', line)
+            if match:
+                period = f"{match.group(1)} {match.group(2)}"
+        if '008' in line and 'MDR' in line:
+            bank_code = "008 - MDR"
+    
+    # Parse transaction data - look for lines with ATM data
+    current_no = 0
+    for line in lines:
+        # Skip empty lines and headers
+        if not line.strip():
+            continue
+        
+        # Try to parse as transaction line
+        # Format: No | Channel | Terminal ID | Location | Sukses | Gagal Bank | Gagal Nasabah | Gagal Jalin | Total | Biaya | Proporsi | Repay
+        parts = line.split('\t')
+        if len(parts) < 10:
+            parts = re.split(r'\s{2,}|\|', line)
+        
+        if len(parts) >= 10:
+            try:
+                # Check if first part is a number (row number)
+                no = int(parts[0].strip())
+                if no > 0:
+                    # Find ATM in parts
+                    atm_idx = -1
+                    for i, p in enumerate(parts):
+                        if 'ATM' in p.upper():
+                            atm_idx = i
+                            break
+                    
+                    if atm_idx >= 0:
+                        transaction = {
+                            'no': no,
+                            'channel_type': 'ATM',
+                            'terminal_id': parts[atm_idx + 1].strip() if atm_idx + 1 < len(parts) else '',
+                            'terminal_location': parts[atm_idx + 2].strip() if atm_idx + 2 < len(parts) else '',
+                            'sukses': parse_number(parts[atm_idx + 3]) if atm_idx + 3 < len(parts) else 0,
+                            'gagal_sistem_bank': parse_number(parts[atm_idx + 4]) if atm_idx + 4 < len(parts) else 0,
+                            'gagal_nasabah': parse_number(parts[atm_idx + 5]) if atm_idx + 5 < len(parts) else 0,
+                            'gagal_sistem_jalin': parse_number(parts[atm_idx + 6]) if atm_idx + 6 < len(parts) else 0,
+                            'total_transaksi_ditagihkan': parse_number(parts[atm_idx + 7]) if atm_idx + 7 < len(parts) else 0,
+                            'biaya_gross': parse_float(parts[atm_idx + 8]) if atm_idx + 8 < len(parts) else 0,
+                            'proporsi_repay': parse_float(parts[atm_idx + 9]) if atm_idx + 9 < len(parts) else 0,
+                            'repay_nominal': parse_float(parts[atm_idx + 10]) if atm_idx + 10 < len(parts) else 0,
+                        }
+                        if transaction['terminal_id']:
+                            transactions.append(transaction)
+            except (ValueError, IndexError):
+                continue
+    
+    return transactions, period, bank_code
+
+
+# Sample data from the report (initial data)
+INITIAL_REPORT_DATA = [
     {"no": 1, "channel_type": "ATM", "terminal_id": "T0901906", "terminal_location": "KAMPUS YAYASAN DEL", "sukses": 37, "gagal_sistem_bank": 0, "gagal_nasabah": 9, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 37, "biaya_gross": 64195, "proporsi_repay": 45.34, "repay_nominal": 29106},
     {"no": 2, "channel_type": "ATM", "terminal_id": "T0806058", "terminal_location": "JKT AM LEBAK BULUS", "sukses": 1156, "gagal_sistem_bank": 40, "gagal_nasabah": 95, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1196, "biaya_gross": 2075060, "proporsi_repay": 38.03, "repay_nominal": 789145},
     {"no": 3, "channel_type": "ATM", "terminal_id": "T0800783", "terminal_location": "BKS MD JATIBENING 01", "sukses": 2989, "gagal_sistem_bank": 52, "gagal_nasabah": 207, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 3041, "biaya_gross": 5276135, "proporsi_repay": 78.52, "repay_nominal": 4142815},
@@ -122,23 +227,70 @@ REPORT_DATA = [
     {"no": 48, "channel_type": "ATM", "terminal_id": "T0805894", "terminal_location": "BKS ED YSKID 02", "sukses": 3738, "gagal_sistem_bank": 60, "gagal_nasabah": 354, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 3798, "biaya_gross": 6589530, "proporsi_repay": 38.03, "repay_nominal": 2505996},
     {"no": 49, "channel_type": "ATM", "terminal_id": "T0805125", "terminal_location": "GRT PB CKAJANG34.44110 01", "sukses": 1605, "gagal_sistem_bank": 21, "gagal_nasabah": 170, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1626, "biaya_gross": 2821110, "proporsi_repay": 38.03, "repay_nominal": 1072867},
     {"no": 50, "channel_type": "ATM", "terminal_id": "T0802108", "terminal_location": "JKT GD TATAPURI 01", "sukses": 2108, "gagal_sistem_bank": 61, "gagal_nasabah": 139, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 2169, "biaya_gross": 3763215, "proporsi_repay": 38.03, "repay_nominal": 1431150},
-    {"no": 71, "channel_type": "ATM", "terminal_id": "T0805174", "terminal_location": "MJK IM BRAWIJAYA 01", "sukses": 4325, "gagal_sistem_bank": 12, "gagal_nasabah": 286, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 4337, "biaya_gross": 7524695, "proporsi_repay": 38.03, "repay_nominal": 2861639},
-    {"no": 112, "channel_type": "ATM", "terminal_id": "T0801161", "terminal_location": "JKT IM BANGKARAYAFRESH 01", "sukses": 5165, "gagal_sistem_bank": 106, "gagal_nasabah": 324, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 5271, "biaya_gross": 9145185, "proporsi_repay": 38.03, "repay_nominal": 3477911},
-    {"no": 217, "channel_type": "ATM", "terminal_id": "T0807577", "terminal_location": "SBY IM KAPASGADINGKARYA01", "sukses": 5679, "gagal_sistem_bank": 75, "gagal_nasabah": 374, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 5754, "biaya_gross": 9983190, "proporsi_repay": 38.03, "repay_nominal": 3796604},
-    {"no": 311, "channel_type": "ATM", "terminal_id": "T0805756", "terminal_location": "TNG IM PORISRESIDENCE 01", "sukses": 5260, "gagal_sistem_bank": 49, "gagal_nasabah": 323, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 5309, "biaya_gross": 9211115, "proporsi_repay": 38.03, "repay_nominal": 3502984},
-    {"no": 215, "channel_type": "ATM", "terminal_id": "T0800593", "terminal_location": "BDG IM CISITU 01", "sukses": 4180, "gagal_sistem_bank": 19, "gagal_nasabah": 197, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 4199, "biaya_gross": 7285265, "proporsi_repay": 78.52, "repay_nominal": 5720382},
-    {"no": 102, "channel_type": "ATM", "terminal_id": "T0800291", "terminal_location": "JBR MT JEMBER 01", "sukses": 3729, "gagal_sistem_bank": 47, "gagal_nasabah": 238, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 3776, "biaya_gross": 6551360, "proporsi_repay": 78.52, "repay_nominal": 5144120},
-    {"no": 87, "channel_type": "ATM", "terminal_id": "T0800410", "terminal_location": "BGR GD HARVESTCITY 01", "sukses": 2833, "gagal_sistem_bank": 30, "gagal_nasabah": 198, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 2863, "biaya_gross": 4967305, "proporsi_repay": 78.52, "repay_nominal": 3900322},
-    {"no": 127, "channel_type": "ATM", "terminal_id": "T0200008", "terminal_location": "KCK Koperasi Sentra BRI", "sukses": 1, "gagal_sistem_bank": 0, "gagal_nasabah": 0, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1, "biaya_gross": 1735, "proporsi_repay": 45.34, "repay_nominal": 787},
-    {"no": 169, "channel_type": "ATM", "terminal_id": "T0200068", "terminal_location": "UNIT MARGONDA", "sukses": 4, "gagal_sistem_bank": 0, "gagal_nasabah": 0, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 4, "biaya_gross": 6940, "proporsi_repay": 45.34, "repay_nominal": 3147},
-    {"no": 287, "channel_type": "ATM", "terminal_id": "T0901112", "terminal_location": "BNI KCP TEUKU UMAR", "sukses": 3, "gagal_sistem_bank": 0, "gagal_nasabah": 0, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 3, "biaya_gross": 5205, "proporsi_repay": 45.34, "repay_nominal": 2360},
-    {"no": 296, "channel_type": "ATM", "terminal_id": "T2002002", "terminal_location": "BTN MALL MESRA INDAH", "sukses": 4, "gagal_sistem_bank": 0, "gagal_nasabah": 0, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 4, "biaya_gross": 6940, "proporsi_repay": 45.34, "repay_nominal": 3147},
-    {"no": 121, "channel_type": "ATM", "terminal_id": "T0800271", "terminal_location": "JKT CB PAKUBUWONO 03", "sukses": 1709, "gagal_sistem_bank": 28, "gagal_nasabah": 143, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1737, "biaya_gross": 3013695, "proporsi_repay": 88.88, "repay_nominal": 2366350},
-    {"no": 153, "channel_type": "ATM", "terminal_id": "T0800204", "terminal_location": "YYK IM MALIOBORO 01", "sukses": 1794, "gagal_sistem_bank": 24, "gagal_nasabah": 149, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1818, "biaya_gross": 3154230, "proporsi_repay": 78.52, "repay_nominal": 2476698},
-    {"no": 233, "channel_type": "ATM", "terminal_id": "T0800226", "terminal_location": "MLG IM KARYAWIGUNA 01", "sukses": 1174, "gagal_sistem_bank": 10, "gagal_nasabah": 103, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1184, "biaya_gross": 2054240, "proporsi_repay": 78.52, "repay_nominal": 1612987},
-    {"no": 322, "channel_type": "ATM", "terminal_id": "T0800873", "terminal_location": "MKS TO SAPTAMINISOCCER 01", "sukses": 1244, "gagal_sistem_bank": 13, "gagal_nasabah": 74, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 1257, "biaya_gross": 2180895, "proporsi_repay": 78.52, "repay_nominal": 1712436},
-    {"no": 183, "channel_type": "ATM", "terminal_id": "T0800041", "terminal_location": "DPK IM BELLACASSA 01", "sukses": 2178, "gagal_sistem_bank": 28, "gagal_nasabah": 107, "gagal_sistem_jalin": 0, "total_transaksi_ditagihkan": 2206, "biaya_gross": 3827410, "proporsi_repay": 78.52, "repay_nominal": 3005278},
 ]
+
+
+def calculate_summary(data: list, period: str = "Unknown", bank_code: str = "008 - MDR", report_id: str = None) -> dict:
+    """Calculate summary statistics from transaction data"""
+    if not data:
+        return None
+    
+    total_sukses = sum(d.get('sukses', 0) for d in data)
+    total_gagal_sistem_bank = sum(d.get('gagal_sistem_bank', 0) for d in data)
+    total_gagal_nasabah = sum(d.get('gagal_nasabah', 0) for d in data)
+    total_gagal_sistem_jalin = sum(d.get('gagal_sistem_jalin', 0) for d in data)
+    total_transaksi_ditagihkan = sum(d.get('total_transaksi_ditagihkan', 0) for d in data)
+    total_biaya_gross = sum(d.get('biaya_gross', 0) for d in data)
+    total_repay_nominal = sum(d.get('repay_nominal', 0) for d in data)
+    avg_proporsi_repay = sum(d.get('proporsi_repay', 0) for d in data) / len(data) if data else 0
+    
+    # Top 10 terminals by transaksi sukses
+    sorted_by_sukses = sorted(data, key=lambda x: x.get('sukses', 0), reverse=True)[:10]
+    top_terminals = [{
+        "terminal_id": t.get('terminal_id', ''),
+        "terminal_location": t.get('terminal_location', ''),
+        "sukses": t.get('sukses', 0),
+        "repay_nominal": t.get('repay_nominal', 0)
+    } for t in sorted_by_sukses]
+    
+    # Bottom 10 terminals by transaksi sukses
+    sorted_by_sukses_asc = sorted(data, key=lambda x: x.get('sukses', 0))[:10]
+    bottom_terminals = [{
+        "terminal_id": t.get('terminal_id', ''),
+        "terminal_location": t.get('terminal_location', ''),
+        "sukses": t.get('sukses', 0),
+        "repay_nominal": t.get('repay_nominal', 0)
+    } for t in sorted_by_sukses_asc]
+    
+    # Proporsi distribution
+    proporsi_low = len([d for d in data if d.get('proporsi_repay', 0) < 40])
+    proporsi_medium = len([d for d in data if 40 <= d.get('proporsi_repay', 0) < 60])
+    proporsi_high = len([d for d in data if 60 <= d.get('proporsi_repay', 0) < 80])
+    proporsi_very_high = len([d for d in data if d.get('proporsi_repay', 0) >= 80])
+    
+    return {
+        "total_terminals": len(data),
+        "total_transaksi_sukses": total_sukses,
+        "total_gagal_sistem_bank": total_gagal_sistem_bank,
+        "total_gagal_nasabah": total_gagal_nasabah,
+        "total_gagal_sistem_jalin": total_gagal_sistem_jalin,
+        "total_transaksi_ditagihkan": total_transaksi_ditagihkan,
+        "total_biaya_gross": total_biaya_gross,
+        "total_repay_nominal": total_repay_nominal,
+        "avg_proporsi_repay": round(avg_proporsi_repay, 2),
+        "top_terminals": top_terminals,
+        "bottom_terminals": bottom_terminals,
+        "proporsi_distribution": {
+            "low (<40%)": proporsi_low,
+            "medium (40-60%)": proporsi_medium,
+            "high (60-80%)": proporsi_high,
+            "very_high (>=80%)": proporsi_very_high
+        },
+        "period": period,
+        "bank_code": bank_code,
+        "report_id": report_id
+    }
+
 
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
@@ -166,80 +318,277 @@ async def get_status_checks():
     
     return status_checks
 
-@api_router.get("/report/summary", response_model=ReportSummary)
-async def get_report_summary():
-    """Get summary of ATM REPAY report"""
-    data = REPORT_DATA
+
+@api_router.get("/reports")
+async def get_all_reports():
+    """Get all uploaded reports"""
+    reports = await db.reports.find({}, {"_id": 0}).sort("upload_date", -1).to_list(100)
     
-    total_sukses = sum(d['sukses'] for d in data)
-    total_gagal_sistem_bank = sum(d['gagal_sistem_bank'] for d in data)
-    total_gagal_nasabah = sum(d['gagal_nasabah'] for d in data)
-    total_gagal_sistem_jalin = sum(d['gagal_sistem_jalin'] for d in data)
-    total_transaksi_ditagihkan = sum(d['total_transaksi_ditagihkan'] for d in data)
-    total_biaya_gross = sum(d['biaya_gross'] for d in data)
-    total_repay_nominal = sum(d['repay_nominal'] for d in data)
-    avg_proporsi_repay = sum(d['proporsi_repay'] for d in data) / len(data) if data else 0
+    # Convert datetime strings back
+    for report in reports:
+        if isinstance(report.get('upload_date'), str):
+            report['upload_date'] = datetime.fromisoformat(report['upload_date'])
     
-    # Top 10 terminals by transaksi sukses
-    sorted_by_sukses = sorted(data, key=lambda x: x['sukses'], reverse=True)[:10]
-    top_terminals = [{
-        "terminal_id": t['terminal_id'],
-        "terminal_location": t['terminal_location'],
-        "sukses": t['sukses'],
-        "repay_nominal": t['repay_nominal']
-    } for t in sorted_by_sukses]
+    return {"reports": reports}
+
+
+@api_router.get("/report/summary")
+async def get_report_summary(report_id: Optional[str] = None):
+    """Get summary of ATM REPAY report. If report_id is provided, get specific report, otherwise get latest or initial data."""
     
-    # Bottom 10 terminals by transaksi sukses
-    sorted_by_sukses_asc = sorted(data, key=lambda x: x['sukses'])[:10]
-    bottom_terminals = [{
-        "terminal_id": t['terminal_id'],
-        "terminal_location": t['terminal_location'],
-        "sukses": t['sukses'],
-        "repay_nominal": t['repay_nominal']
-    } for t in sorted_by_sukses_asc]
+    if report_id:
+        # Get specific report transactions
+        transactions = await db.transactions.find({"report_id": report_id}, {"_id": 0}).to_list(10000)
+        report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+        
+        if not transactions:
+            raise HTTPException(status_code=404, detail="Report not found")
+        
+        return calculate_summary(
+            transactions, 
+            period=report.get('period', 'Unknown') if report else 'Unknown',
+            bank_code=report.get('bank_code', '008 - MDR') if report else '008 - MDR',
+            report_id=report_id
+        )
     
-    # Proporsi distribution
-    proporsi_low = len([d for d in data if d['proporsi_repay'] < 40])
-    proporsi_medium = len([d for d in data if 40 <= d['proporsi_repay'] < 60])
-    proporsi_high = len([d for d in data if 60 <= d['proporsi_repay'] < 80])
-    proporsi_very_high = len([d for d in data if d['proporsi_repay'] >= 80])
+    # Check if there are any uploaded reports
+    latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
     
-    proporsi_distribution = {
-        "low (<40%)": proporsi_low,
-        "medium (40-60%)": proporsi_medium,
-        "high (60-80%)": proporsi_high,
-        "very_high (>=80%)": proporsi_very_high
-    }
+    if latest_report:
+        transactions = await db.transactions.find({"report_id": latest_report['id']}, {"_id": 0}).to_list(10000)
+        return calculate_summary(
+            transactions,
+            period=latest_report.get('period', 'Unknown'),
+            bank_code=latest_report.get('bank_code', '008 - MDR'),
+            report_id=latest_report['id']
+        )
     
-    return ReportSummary(
-        total_terminals=len(data),
-        total_transaksi_sukses=total_sukses,
-        total_gagal_sistem_bank=total_gagal_sistem_bank,
-        total_gagal_nasabah=total_gagal_nasabah,
-        total_gagal_sistem_jalin=total_gagal_sistem_jalin,
-        total_transaksi_ditagihkan=total_transaksi_ditagihkan,
-        total_biaya_gross=total_biaya_gross,
-        total_repay_nominal=total_repay_nominal,
-        avg_proporsi_repay=round(avg_proporsi_repay, 2),
-        top_terminals=top_terminals,
-        bottom_terminals=bottom_terminals,
-        proporsi_distribution=proporsi_distribution,
-        period="Desember 2025",
-        bank_code="008 - MDR"
-    )
+    # Return initial data if no uploads
+    return calculate_summary(INITIAL_REPORT_DATA, period="Desember 2025", bank_code="008 - MDR")
+
 
 @api_router.get("/report/transactions")
-async def get_all_transactions():
-    """Get all ATM transaction data"""
-    return {"data": REPORT_DATA, "total": len(REPORT_DATA)}
+async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, limit: int = 50, search: str = ""):
+    """Get all ATM transaction data with pagination"""
+    
+    skip = (page - 1) * limit
+    
+    if report_id:
+        query = {"report_id": report_id}
+        if search:
+            query["$or"] = [
+                {"terminal_id": {"$regex": search, "$options": "i"}},
+                {"terminal_location": {"$regex": search, "$options": "i"}}
+            ]
+        
+        transactions = await db.transactions.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
+        total = await db.transactions.count_documents(query)
+        
+        if transactions:
+            return {
+                "data": transactions, 
+                "total": total, 
+                "page": page, 
+                "limit": limit,
+                "pages": (total + limit - 1) // limit
+            }
+    
+    # Check for latest report
+    latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
+    
+    if latest_report:
+        query = {"report_id": latest_report['id']}
+        if search:
+            query["$or"] = [
+                {"terminal_id": {"$regex": search, "$options": "i"}},
+                {"terminal_location": {"$regex": search, "$options": "i"}}
+            ]
+        
+        transactions = await db.transactions.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
+        total = await db.transactions.count_documents(query)
+        
+        return {
+            "data": transactions, 
+            "total": total, 
+            "page": page, 
+            "limit": limit,
+            "pages": (total + limit - 1) // limit,
+            "report_id": latest_report['id']
+        }
+    
+    # Return initial data
+    filtered_data = INITIAL_REPORT_DATA
+    if search:
+        filtered_data = [d for d in INITIAL_REPORT_DATA if search.lower() in d['terminal_id'].lower() or search.lower() in d['terminal_location'].lower()]
+    
+    total = len(filtered_data)
+    paginated_data = filtered_data[skip:skip+limit]
+    
+    return {
+        "data": paginated_data, 
+        "total": total, 
+        "page": page, 
+        "limit": limit,
+        "pages": (total + limit - 1) // limit
+    }
+
+
+@api_router.post("/report/upload")
+async def upload_report(file: UploadFile = File(...), period: str = Form(None), bank_code: str = Form("008 - MDR")):
+    """Upload and process a report file"""
+    
+    # Read file content
+    content = await file.read()
+    
+    try:
+        text_content = content.decode('utf-8')
+    except:
+        try:
+            text_content = content.decode('latin-1')
+        except:
+            raise HTTPException(status_code=400, detail="Unable to read file encoding")
+    
+    # Parse the file
+    transactions, detected_period, detected_bank = parse_report_file(text_content)
+    
+    # Use provided values or detected ones
+    final_period = period if period else detected_period
+    final_bank = bank_code if bank_code != "008 - MDR" else detected_bank
+    
+    if not transactions:
+        # If parsing failed, store raw data and let user know
+        # Create report with manual entry option
+        report_id = str(uuid.uuid4())
+        report = {
+            "id": report_id,
+            "filename": file.filename,
+            "period": final_period,
+            "bank_code": final_bank,
+            "upload_date": datetime.now(timezone.utc).isoformat(),
+            "total_terminals": 0,
+            "total_transaksi_sukses": 0,
+            "total_repay_nominal": 0,
+            "raw_content": text_content[:5000],  # Store first 5000 chars for reference
+            "status": "pending_manual_entry"
+        }
+        await db.reports.insert_one(report)
+        
+        return {
+            "success": False,
+            "message": "File uploaded but automatic parsing failed. Please enter data manually.",
+            "report_id": report_id,
+            "filename": file.filename
+        }
+    
+    # Create report record
+    report_id = str(uuid.uuid4())
+    total_sukses = sum(t.get('sukses', 0) for t in transactions)
+    total_repay = sum(t.get('repay_nominal', 0) for t in transactions)
+    
+    report = {
+        "id": report_id,
+        "filename": file.filename,
+        "period": final_period,
+        "bank_code": final_bank,
+        "upload_date": datetime.now(timezone.utc).isoformat(),
+        "total_terminals": len(transactions),
+        "total_transaksi_sukses": total_sukses,
+        "total_repay_nominal": total_repay,
+        "status": "completed"
+    }
+    await db.reports.insert_one(report)
+    
+    # Store transactions
+    for t in transactions:
+        t['id'] = str(uuid.uuid4())
+        t['report_id'] = report_id
+    
+    if transactions:
+        await db.transactions.insert_many(transactions)
+    
+    return {
+        "success": True,
+        "message": f"Successfully uploaded {len(transactions)} transactions",
+        "report_id": report_id,
+        "filename": file.filename,
+        "period": final_period,
+        "total_transactions": len(transactions),
+        "total_sukses": total_sukses,
+        "total_repay_nominal": total_repay
+    }
+
+
+@api_router.post("/report/manual")
+async def add_manual_transactions(transactions: List[dict], period: str = "Unknown", bank_code: str = "008 - MDR"):
+    """Manually add transactions for a new report"""
+    
+    if not transactions:
+        raise HTTPException(status_code=400, detail="No transactions provided")
+    
+    report_id = str(uuid.uuid4())
+    total_sukses = sum(t.get('sukses', 0) for t in transactions)
+    total_repay = sum(t.get('repay_nominal', 0) for t in transactions)
+    
+    report = {
+        "id": report_id,
+        "filename": "manual_entry",
+        "period": period,
+        "bank_code": bank_code,
+        "upload_date": datetime.now(timezone.utc).isoformat(),
+        "total_terminals": len(transactions),
+        "total_transaksi_sukses": total_sukses,
+        "total_repay_nominal": total_repay,
+        "status": "completed"
+    }
+    await db.reports.insert_one(report)
+    
+    # Store transactions
+    for i, t in enumerate(transactions):
+        t['id'] = str(uuid.uuid4())
+        t['report_id'] = report_id
+        t['no'] = i + 1
+    
+    await db.transactions.insert_many(transactions)
+    
+    return {
+        "success": True,
+        "report_id": report_id,
+        "total_transactions": len(transactions)
+    }
+
+
+@api_router.delete("/report/{report_id}")
+async def delete_report(report_id: str):
+    """Delete a report and its transactions"""
+    
+    # Delete transactions
+    await db.transactions.delete_many({"report_id": report_id})
+    
+    # Delete report
+    result = await db.reports.delete_one({"id": report_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return {"success": True, "message": "Report deleted successfully"}
+
 
 @api_router.get("/report/transaction/{terminal_id}")
 async def get_transaction_by_terminal(terminal_id: str):
     """Get transaction data by terminal ID"""
-    for transaction in REPORT_DATA:
-        if transaction['terminal_id'] == terminal_id:
-            return transaction
+    # Check database first
+    transaction = await db.transactions.find_one({"terminal_id": terminal_id}, {"_id": 0})
+    
+    if transaction:
+        return transaction
+    
+    # Check initial data
+    for t in INITIAL_REPORT_DATA:
+        if t['terminal_id'] == terminal_id:
+            return t
+    
     raise HTTPException(status_code=404, detail="Terminal not found")
+
 
 # Include the router in the main app
 app.include_router(api_router)
