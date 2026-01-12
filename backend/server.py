@@ -368,10 +368,11 @@ async def get_report_summary(report_id: Optional[str] = None):
 
 
 @api_router.get("/report/transactions")
-async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, limit: int = 50, search: str = ""):
-    """Get all ATM transaction data with pagination"""
+async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, limit: int = 50, search: str = "", sort_by: str = "terminal_id", sort_order: str = "asc"):
+    """Get all ATM transaction data with pagination, sorted by terminal_id"""
     
     skip = (page - 1) * limit
+    sort_direction = 1 if sort_order == "asc" else -1
     
     if report_id:
         query = {"report_id": report_id}
@@ -381,7 +382,7 @@ async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, l
                 {"terminal_location": {"$regex": search, "$options": "i"}}
             ]
         
-        transactions = await db.transactions.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
+        transactions = await db.transactions.find(query, {"_id": 0}).sort(sort_by, sort_direction).skip(skip).limit(limit).to_list(limit)
         total = await db.transactions.count_documents(query)
         
         if transactions:
@@ -404,7 +405,7 @@ async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, l
                 {"terminal_location": {"$regex": search, "$options": "i"}}
             ]
         
-        transactions = await db.transactions.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
+        transactions = await db.transactions.find(query, {"_id": 0}).sort(sort_by, sort_direction).skip(skip).limit(limit).to_list(limit)
         total = await db.transactions.count_documents(query)
         
         return {
@@ -416,10 +417,13 @@ async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, l
             "report_id": latest_report['id']
         }
     
-    # Return initial data
-    filtered_data = INITIAL_REPORT_DATA
+    # Return initial data sorted
+    filtered_data = INITIAL_REPORT_DATA.copy()
     if search:
-        filtered_data = [d for d in INITIAL_REPORT_DATA if search.lower() in d['terminal_id'].lower() or search.lower() in d['terminal_location'].lower()]
+        filtered_data = [d for d in filtered_data if search.lower() in d['terminal_id'].lower() or search.lower() in d['terminal_location'].lower()]
+    
+    # Sort data
+    filtered_data.sort(key=lambda x: x.get(sort_by, ''), reverse=(sort_order == "desc"))
     
     total = len(filtered_data)
     paginated_data = filtered_data[skip:skip+limit]
@@ -430,6 +434,94 @@ async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, l
         "page": page, 
         "limit": limit,
         "pages": (total + limit - 1) // limit
+    }
+
+
+@api_router.get("/report/transactions/export")
+async def export_transactions(report_id: Optional[str] = None, search: str = ""):
+    """Export all transactions for CSV/Excel download"""
+    
+    if report_id:
+        query = {"report_id": report_id}
+        if search:
+            query["$or"] = [
+                {"terminal_id": {"$regex": search, "$options": "i"}},
+                {"terminal_location": {"$regex": search, "$options": "i"}}
+            ]
+        
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        
+        if transactions:
+            return {"data": transactions}
+    
+    # Check for latest report
+    latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
+    
+    if latest_report:
+        query = {"report_id": latest_report['id']}
+        if search:
+            query["$or"] = [
+                {"terminal_id": {"$regex": search, "$options": "i"}},
+                {"terminal_location": {"$regex": search, "$options": "i"}}
+            ]
+        
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        return {"data": transactions}
+    
+    # Return initial data sorted
+    sorted_data = sorted(INITIAL_REPORT_DATA, key=lambda x: x.get('terminal_id', ''))
+    if search:
+        sorted_data = [d for d in sorted_data if search.lower() in d['terminal_id'].lower() or search.lower() in d['terminal_location'].lower()]
+    
+    return {"data": sorted_data}
+
+
+@api_router.get("/report/terminal-summary")
+async def get_terminal_summary(report_id: Optional[str] = None, search: str = ""):
+    """Get summary per terminal with search capability"""
+    
+    transactions = []
+    
+    if report_id:
+        query = {"report_id": report_id}
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+    else:
+        # Check for latest report
+        latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
+        
+        if latest_report:
+            query = {"report_id": latest_report['id']}
+            transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        else:
+            transactions = sorted(INITIAL_REPORT_DATA, key=lambda x: x.get('terminal_id', ''))
+    
+    # Apply search filter
+    if search:
+        transactions = [t for t in transactions if 
+                       search.lower() in t.get('terminal_id', '').lower() or 
+                       search.lower() in t.get('terminal_location', '').lower()]
+    
+    # Calculate summary per terminal
+    terminal_summary = []
+    for t in transactions:
+        total_transaksi = t.get('sukses', 0) + t.get('gagal_sistem_bank', 0) + t.get('gagal_nasabah', 0) + t.get('gagal_sistem_jalin', 0)
+        success_rate = (t.get('sukses', 0) / total_transaksi * 100) if total_transaksi > 0 else 0
+        
+        terminal_summary.append({
+            "terminal_id": t.get('terminal_id', ''),
+            "terminal_location": t.get('terminal_location', ''),
+            "total_transaksi": total_transaksi,
+            "sukses": t.get('sukses', 0),
+            "gagal": t.get('gagal_sistem_bank', 0) + t.get('gagal_nasabah', 0) + t.get('gagal_sistem_jalin', 0),
+            "success_rate": round(success_rate, 2),
+            "biaya_gross": t.get('biaya_gross', 0),
+            "repay_nominal": t.get('repay_nominal', 0),
+            "proporsi_repay": t.get('proporsi_repay', 0)
+        })
+    
+    return {
+        "data": terminal_summary,
+        "total": len(terminal_summary)
     }
 
 
