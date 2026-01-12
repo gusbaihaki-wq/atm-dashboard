@@ -20,6 +20,43 @@ const formatNumber = (num) => {
   return new Intl.NumberFormat('id-ID').format(num);
 };
 
+// Export to CSV function
+const exportToCSV = (data, filename, columns) => {
+  const headers = columns.map(col => col.label).join(',');
+  const rows = data.map(row => 
+    columns.map(col => {
+      let value = row[col.key];
+      // Handle values with commas
+      if (typeof value === 'string' && value.includes(',')) {
+        value = `"${value}"`;
+      }
+      return value;
+    }).join(',')
+  );
+  
+  const csv = [headers, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}.csv`;
+  link.click();
+};
+
+// Export to Excel function (using CSV with Excel-compatible format)
+const exportToExcel = (data, filename, columns) => {
+  const headers = columns.map(col => col.label).join('\t');
+  const rows = data.map(row => 
+    columns.map(col => row[col.key]).join('\t')
+  );
+  
+  const excel = [headers, ...rows].join('\n');
+  const blob = new Blob(['\ufeff' + excel], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}.xls`;
+  link.click();
+};
+
 // Card component for statistics
 const StatCard = ({ title, value, icon, color }) => (
   <div className={`bg-white rounded-xl shadow-lg p-6 border-l-4 ${color}`} data-testid={`stat-card-${title.toLowerCase().replace(/\s/g, '-')}`}>
@@ -50,6 +87,56 @@ const DetailTransactionRow = ({ data, index }) => (
     <td className="py-2 px-3 text-right text-sm">{data.proporsi_repay}%</td>
     <td className="py-2 px-3 text-right text-blue-600 font-semibold text-sm">{formatRupiah(data.repay_nominal)}</td>
   </tr>
+);
+
+// Terminal Summary Row Component
+const TerminalSummaryRow = ({ data, index }) => (
+  <tr className={`border-b hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+    <td className="py-2 px-3 text-center text-gray-600 text-sm">{index + 1}</td>
+    <td className="py-2 px-3 font-medium text-blue-600 text-sm">{data.terminal_id}</td>
+    <td className="py-2 px-3 text-gray-700 text-sm">{data.terminal_location}</td>
+    <td className="py-2 px-3 text-right font-semibold text-sm">{formatNumber(data.total_transaksi)}</td>
+    <td className="py-2 px-3 text-right text-green-600 font-semibold text-sm">{formatNumber(data.sukses)}</td>
+    <td className="py-2 px-3 text-right text-red-500 text-sm">{formatNumber(data.gagal)}</td>
+    <td className="py-2 px-3 text-right text-sm">
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+        data.success_rate >= 90 ? 'bg-green-100 text-green-700' :
+        data.success_rate >= 70 ? 'bg-yellow-100 text-yellow-700' :
+        'bg-red-100 text-red-700'
+      }`}>
+        {data.success_rate}%
+      </span>
+    </td>
+    <td className="py-2 px-3 text-right text-purple-600 text-sm">{formatRupiah(data.biaya_gross)}</td>
+    <td className="py-2 px-3 text-right text-sm">{data.proporsi_repay}%</td>
+    <td className="py-2 px-3 text-right text-blue-600 font-semibold text-sm">{formatRupiah(data.repay_nominal)}</td>
+  </tr>
+);
+
+// Export Buttons Component
+const ExportButtons = ({ onExportCSV, onExportExcel, disabled }) => (
+  <div className="flex gap-2">
+    <button
+      onClick={onExportCSV}
+      disabled={disabled}
+      className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+        disabled ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'
+      }`}
+      data-testid="export-csv-btn"
+    >
+      📄 Export CSV
+    </button>
+    <button
+      onClick={onExportExcel}
+      disabled={disabled}
+      className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+        disabled ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'
+      }`}
+      data-testid="export-excel-btn"
+    >
+      📊 Export Excel
+    </button>
+  </div>
 );
 
 // File Upload Component
@@ -179,15 +266,18 @@ const ReportSelector = ({ reports, selectedReport, onSelectReport }) => {
 function App() {
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [terminalSummary, setTerminalSummary] = useState([]);
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
+  const [terminalSearchTerm, setTerminalSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalTransactions, setTotalTransactions] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   const fetchReports = useCallback(async () => {
     try {
@@ -216,7 +306,9 @@ function App() {
       const params = new URLSearchParams({
         page: currentPage,
         limit: 20,
-        search: searchTerm
+        search: searchTerm,
+        sort_by: 'terminal_id',
+        sort_order: 'asc'
       });
       if (selectedReport) params.append('report_id', selectedReport);
 
@@ -229,23 +321,37 @@ function App() {
     }
   }, [currentPage, searchTerm, selectedReport]);
 
+  const fetchTerminalSummary = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ search: terminalSearchTerm });
+      if (selectedReport) params.append('report_id', selectedReport);
+
+      const response = await axios.get(`${API}/report/terminal-summary?${params}`);
+      setTerminalSummary(response.data.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [terminalSearchTerm, selectedReport]);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       await fetchReports();
       await fetchSummary();
       await fetchTransactions();
+      await fetchTerminalSummary();
       setLoading(false);
     };
     loadData();
-  }, [fetchReports, fetchSummary, fetchTransactions]);
+  }, [fetchReports, fetchSummary, fetchTransactions, fetchTerminalSummary]);
 
   useEffect(() => {
     if (!loading) {
       fetchSummary();
       fetchTransactions();
+      fetchTerminalSummary();
     }
-  }, [selectedReport, fetchSummary, fetchTransactions, loading]);
+  }, [selectedReport, fetchSummary, fetchTransactions, fetchTerminalSummary, loading]);
 
   useEffect(() => {
     if (!loading) {
@@ -253,9 +359,109 @@ function App() {
     }
   }, [currentPage, searchTerm, fetchTransactions, loading]);
 
+  useEffect(() => {
+    if (!loading) {
+      fetchTerminalSummary();
+    }
+  }, [terminalSearchTerm, fetchTerminalSummary, loading]);
+
   const handleUploadSuccess = (reportId) => {
     fetchReports();
     setSelectedReport(reportId);
+  };
+
+  // Export handlers for Detail Transactions
+  const handleExportDetailCSV = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ search: searchTerm });
+      if (selectedReport) params.append('report_id', selectedReport);
+      
+      const response = await axios.get(`${API}/report/transactions/export?${params}`);
+      const data = response.data.data || [];
+      
+      const columns = [
+        { key: 'terminal_id', label: 'Terminal ID' },
+        { key: 'terminal_location', label: 'Lokasi' },
+        { key: 'sukses', label: 'Sukses' },
+        { key: 'gagal_sistem_bank', label: 'Gagal Bank' },
+        { key: 'gagal_nasabah', label: 'Gagal Nasabah' },
+        { key: 'gagal_sistem_jalin', label: 'Gagal Jalin' },
+        { key: 'total_transaksi_ditagihkan', label: 'Total Ditagih' },
+        { key: 'biaya_gross', label: 'Biaya Gross' },
+        { key: 'proporsi_repay', label: 'Proporsi (%)' },
+        { key: 'repay_nominal', label: 'Repay Nominal' }
+      ];
+      
+      exportToCSV(data, `detail_transaksi_${summary?.period || 'data'}`, columns);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportDetailExcel = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ search: searchTerm });
+      if (selectedReport) params.append('report_id', selectedReport);
+      
+      const response = await axios.get(`${API}/report/transactions/export?${params}`);
+      const data = response.data.data || [];
+      
+      const columns = [
+        { key: 'terminal_id', label: 'Terminal ID' },
+        { key: 'terminal_location', label: 'Lokasi' },
+        { key: 'sukses', label: 'Sukses' },
+        { key: 'gagal_sistem_bank', label: 'Gagal Bank' },
+        { key: 'gagal_nasabah', label: 'Gagal Nasabah' },
+        { key: 'gagal_sistem_jalin', label: 'Gagal Jalin' },
+        { key: 'total_transaksi_ditagihkan', label: 'Total Ditagih' },
+        { key: 'biaya_gross', label: 'Biaya Gross' },
+        { key: 'proporsi_repay', label: 'Proporsi (%)' },
+        { key: 'repay_nominal', label: 'Repay Nominal' }
+      ];
+      
+      exportToExcel(data, `detail_transaksi_${summary?.period || 'data'}`, columns);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Export handlers for Terminal Summary
+  const handleExportTerminalCSV = () => {
+    const columns = [
+      { key: 'terminal_id', label: 'Terminal ID' },
+      { key: 'terminal_location', label: 'Lokasi' },
+      { key: 'total_transaksi', label: 'Total Transaksi' },
+      { key: 'sukses', label: 'Sukses' },
+      { key: 'gagal', label: 'Gagal' },
+      { key: 'success_rate', label: 'Success Rate (%)' },
+      { key: 'biaya_gross', label: 'Biaya Gross' },
+      { key: 'proporsi_repay', label: 'Proporsi (%)' },
+      { key: 'repay_nominal', label: 'Repay Nominal' }
+    ];
+    
+    exportToCSV(terminalSummary, `ringkasan_terminal_${summary?.period || 'data'}`, columns);
+  };
+
+  const handleExportTerminalExcel = () => {
+    const columns = [
+      { key: 'terminal_id', label: 'Terminal ID' },
+      { key: 'terminal_location', label: 'Lokasi' },
+      { key: 'total_transaksi', label: 'Total Transaksi' },
+      { key: 'sukses', label: 'Sukses' },
+      { key: 'gagal', label: 'Gagal' },
+      { key: 'success_rate', label: 'Success Rate (%)' },
+      { key: 'biaya_gross', label: 'Biaya Gross' },
+      { key: 'proporsi_repay', label: 'Proporsi (%)' },
+      { key: 'repay_nominal', label: 'Repay Nominal' }
+    ];
+    
+    exportToExcel(terminalSummary, `ringkasan_terminal_${summary?.period || 'data'}`, columns);
   };
 
   if (loading) {
@@ -310,35 +516,42 @@ function App() {
         <div className="bg-white rounded-xl shadow-md p-2 inline-flex gap-2 flex-wrap" data-testid="navigation-tabs">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
             data-testid="tab-overview"
           >
             📈 Overview
           </button>
           <button
             onClick={() => setActiveTab('detail')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'detail' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'detail' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
             data-testid="tab-detail"
           >
             📋 Detail Transaksi
           </button>
           <button
+            onClick={() => setActiveTab('terminal')}
+            className={`px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'terminal' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+            data-testid="tab-terminal"
+          >
+            🏧 Ringkasan Terminal
+          </button>
+          <button
             onClick={() => setActiveTab('top')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'top' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'top' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
             data-testid="tab-top"
           >
             🏆 Top Terminal
           </button>
           <button
             onClick={() => setActiveTab('bottom')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'bottom' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'bottom' ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
             data-testid="tab-bottom"
           >
             📉 Bottom Terminal
           </button>
           <button
             onClick={() => setActiveTab('upload')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'upload' ? 'bg-green-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'upload' ? 'bg-green-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
             data-testid="tab-upload"
           >
             📤 Upload
@@ -434,7 +647,7 @@ function App() {
           <section data-testid="detail-section">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
               <h2 className="text-xl font-bold text-gray-800">📋 Detail Semua Transaksi ({formatNumber(totalTransactions)} data)</h2>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
                 <input
                   type="text"
                   placeholder="Cari terminal ID atau lokasi..."
@@ -446,6 +659,11 @@ function App() {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-64"
                   data-testid="search-input"
                 />
+                <ExportButtons 
+                  onExportCSV={handleExportDetailCSV}
+                  onExportExcel={handleExportDetailExcel}
+                  disabled={exporting}
+                />
               </div>
             </div>
             
@@ -454,7 +672,7 @@ function App() {
                 <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
                   <tr>
                     <th className="py-3 px-3 text-center">No</th>
-                    <th className="py-3 px-3 text-left">Terminal ID</th>
+                    <th className="py-3 px-3 text-left">Terminal ID ↑</th>
                     <th className="py-3 px-3 text-left">Lokasi</th>
                     <th className="py-3 px-3 text-right">Sukses</th>
                     <th className="py-3 px-3 text-right">Gagal Bank</th>
@@ -494,6 +712,59 @@ function App() {
                 Next →
               </button>
             </div>
+          </section>
+        )}
+
+        {activeTab === 'terminal' && (
+          <section data-testid="terminal-summary-section">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+              <h2 className="text-xl font-bold text-gray-800">🏧 Ringkasan Per Terminal ({formatNumber(terminalSummary.length)} terminal)</h2>
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                <input
+                  type="text"
+                  placeholder="Cari terminal ID atau lokasi..."
+                  value={terminalSearchTerm}
+                  onChange={(e) => setTerminalSearchTerm(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-64"
+                  data-testid="terminal-search-input"
+                />
+                <ExportButtons 
+                  onExportCSV={handleExportTerminalCSV}
+                  onExportExcel={handleExportTerminalExcel}
+                  disabled={terminalSummary.length === 0}
+                />
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
+                  <tr>
+                    <th className="py-3 px-3 text-center">No</th>
+                    <th className="py-3 px-3 text-left">Terminal ID</th>
+                    <th className="py-3 px-3 text-left">Lokasi</th>
+                    <th className="py-3 px-3 text-right">Total Transaksi</th>
+                    <th className="py-3 px-3 text-right">Sukses</th>
+                    <th className="py-3 px-3 text-right">Gagal</th>
+                    <th className="py-3 px-3 text-right">Success Rate</th>
+                    <th className="py-3 px-3 text-right">Biaya Gross</th>
+                    <th className="py-3 px-3 text-right">Proporsi</th>
+                    <th className="py-3 px-3 text-right">Repay Nominal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {terminalSummary.map((t, idx) => (
+                    <TerminalSummaryRow key={t.terminal_id} data={t} index={idx} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {terminalSummary.length === 0 && (
+              <div className="text-center py-12 bg-white rounded-xl shadow-lg mt-4">
+                <p className="text-gray-500">Tidak ada data yang ditemukan</p>
+              </div>
+            )}
           </section>
         )}
 
