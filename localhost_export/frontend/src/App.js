@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import "@/App.css";
+import "./App.css";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
