@@ -809,10 +809,15 @@ function App() {
     try {
       await axios.delete(`${API}/reports/clear-all`);
       setSelectedReport(null);
+      setSelectedDate('');
       setReports([]);
+      setBankSummary([]);
+      setAvailableDates([]);
       // Refresh all data
       await fetchReports();
+      await fetchAvailableDates();
       await fetchSummary();
+      await fetchBankSummary();
       await fetchDetailTransactions();
       await fetchTerminalSummary();
       alert('Semua data berhasil dihapus');
