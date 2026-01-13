@@ -68,6 +68,59 @@ class ReportMeta(BaseModel):
     total_transaksi_sukses: int
     total_repay_nominal: float
 
+
+class ATMActivation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    no: int
+    bank: str
+    terminal_id_sebelumnya: Optional[str] = ""
+    lokasi_sebelumnya: Optional[str] = ""
+    terminal_id_baru: str
+    lokasi: str
+    tanggal_aktivasi: str
+    tanggal_terminated: Optional[str] = ""
+    mitra_penyedia: Optional[str] = ""
+    mitra_rpl: Optional[str] = ""
+    mitra_slm: Optional[str] = ""
+    mitra_jarkom: Optional[str] = ""
+    mitra_cctv: Optional[str] = ""
+    mitra_ups: Optional[str] = ""
+    mitra_premises: Optional[str] = ""
+
+
+class ATMActivationCreate(BaseModel):
+    terminal_id_sebelumnya: Optional[str] = ""
+    lokasi_sebelumnya: Optional[str] = ""
+    terminal_id_baru: str
+    lokasi: str
+    tanggal_aktivasi: str
+    tanggal_terminated: Optional[str] = ""
+    mitra_penyedia: Optional[str] = ""
+    mitra_rpl: Optional[str] = ""
+    mitra_slm: Optional[str] = ""
+    mitra_jarkom: Optional[str] = ""
+    mitra_cctv: Optional[str] = ""
+    mitra_ups: Optional[str] = ""
+    mitra_premises: Optional[str] = ""
+
+
+class ATMActivationUpdate(BaseModel):
+    terminal_id_sebelumnya: Optional[str] = None
+    lokasi_sebelumnya: Optional[str] = None
+    terminal_id_baru: Optional[str] = None
+    lokasi: Optional[str] = None
+    tanggal_aktivasi: Optional[str] = None
+    tanggal_terminated: Optional[str] = None
+    mitra_penyedia: Optional[str] = None
+    mitra_rpl: Optional[str] = None
+    mitra_slm: Optional[str] = None
+    mitra_jarkom: Optional[str] = None
+    mitra_cctv: Optional[str] = None
+    mitra_ups: Optional[str] = None
+    mitra_premises: Optional[str] = None
+
 class ReportSummary(BaseModel):
     total_terminals: int
     total_transaksi_sukses: int
