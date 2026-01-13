@@ -249,6 +249,7 @@ def calculate_summary(data: list, period: str = "Unknown", bank_code: str = "008
     top_terminals = [{
         "terminal_id": t.get('terminal_id', ''),
         "terminal_location": t.get('terminal_location', ''),
+        "bank": get_bank_name(t.get('terminal_id', '')),
         "sukses": t.get('sukses', 0),
         "repay_nominal": t.get('repay_nominal', 0)
     } for t in sorted_by_sukses]
@@ -258,6 +259,7 @@ def calculate_summary(data: list, period: str = "Unknown", bank_code: str = "008
     bottom_terminals = [{
         "terminal_id": t.get('terminal_id', ''),
         "terminal_location": t.get('terminal_location', ''),
+        "bank": get_bank_name(t.get('terminal_id', '')),
         "sukses": t.get('sukses', 0),
         "repay_nominal": t.get('repay_nominal', 0)
     } for t in sorted_by_sukses_asc]
