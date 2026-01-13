@@ -131,6 +131,9 @@ User meminta aplikasi dashboard untuk mengelola laporan transaksi ATM REPAY deng
 | - | ATM Aktivasi CRUD |
 | - | Export CSV/Excel |
 | 13 Jan 2026 | Fitur hapus laporan individual dan hapus semua data |
+| 13 Jan 2026 | Filter tanggal di Overview |
+| 13 Jan 2026 | Ringkasan transaksi per Bank di Overview |
+| 13 Jan 2026 | Indikator warna total transaksi di Terminal |
 
 ## Prioritized Backlog
 - P2: Refactor App.js menjadi komponen terpisah
