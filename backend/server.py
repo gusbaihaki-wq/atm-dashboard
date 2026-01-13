@@ -936,6 +936,37 @@ async def delete_report(report_id: str):
     return {"success": True, "message": "Report deleted successfully"}
 
 
+@api_router.delete("/reports/clear-all")
+async def clear_all_reports():
+    """Delete all reports and transactions"""
+    
+    # Delete all transactions
+    trans_result = await db.transactions.delete_many({})
+    
+    # Delete all reports
+    report_result = await db.reports.delete_many({})
+    
+    return {
+        "success": True, 
+        "message": "All data cleared successfully",
+        "deleted_reports": report_result.deleted_count,
+        "deleted_transactions": trans_result.deleted_count
+    }
+
+
+@api_router.delete("/atm-activation/clear-all")
+async def clear_all_activations():
+    """Delete all ATM activation records"""
+    
+    result = await db.atm_activations.delete_many({})
+    
+    return {
+        "success": True,
+        "message": "All ATM activation data cleared",
+        "deleted_count": result.deleted_count
+    }
+
+
 @api_router.get("/report/transaction/{terminal_id}")
 async def get_transaction_by_terminal(terminal_id: str):
     """Get transaction data by terminal ID"""
