@@ -685,7 +685,8 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [bankSummary, setBankSummary] = useState([]);
   const [availableDates, setAvailableDates] = useState([]);
-  const [selectedDate, setSelectedDate] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [detailTransactions, setDetailTransactions] = useState([]);
   const [terminalSummary, setTerminalSummary] = useState([]);
   const [reports, setReports] = useState([]);
