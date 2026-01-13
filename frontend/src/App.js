@@ -739,6 +739,52 @@ function App() {
 
   const handleUploadSuccess = (reportId) => { fetchReports(); setSelectedReport(reportId); };
 
+  const handleDeleteReport = async (reportId) => {
+    if (!window.confirm('Yakin ingin menghapus laporan ini? Data transaksi terkait juga akan dihapus.')) return;
+    
+    setDeleting(reportId);
+    try {
+      await axios.delete(`${API}/report/${reportId}`);
+      // Clear selection if deleted report was selected
+      if (selectedReport === reportId) {
+        setSelectedReport(null);
+      }
+      // Refresh data
+      await fetchReports();
+      await fetchSummary();
+      await fetchDetailTransactions();
+      await fetchTerminalSummary();
+    } catch (e) {
+      console.error('Failed to delete report:', e);
+      alert('Gagal menghapus laporan');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (!window.confirm('⚠️ PERINGATAN: Semua data laporan dan transaksi akan dihapus permanen!\n\nYakin ingin melanjutkan?')) return;
+    if (!window.confirm('Konfirmasi sekali lagi: Hapus SEMUA data?')) return;
+    
+    setClearingAll(true);
+    try {
+      await axios.delete(`${API}/reports/clear-all`);
+      setSelectedReport(null);
+      setReports([]);
+      // Refresh all data
+      await fetchReports();
+      await fetchSummary();
+      await fetchDetailTransactions();
+      await fetchTerminalSummary();
+      alert('Semua data berhasil dihapus');
+    } catch (e) {
+      console.error('Failed to clear all data:', e);
+      alert('Gagal menghapus semua data');
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   const handleExportDetailCSV = async () => {
     setExporting(true);
     try {
