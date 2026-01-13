@@ -26,7 +26,6 @@ const exportToCSV = (data, filename, columns) => {
   const rows = data.map(row => 
     columns.map(col => {
       let value = row[col.key];
-      // Handle values with commas
       if (typeof value === 'string' && value.includes(',')) {
         value = `"${value}"`;
       }
@@ -42,7 +41,7 @@ const exportToCSV = (data, filename, columns) => {
   link.click();
 };
 
-// Export to Excel function (using CSV with Excel-compatible format)
+// Export to Excel function
 const exportToExcel = (data, filename, columns) => {
   const headers = columns.map(col => col.label).join('\t');
   const rows = data.map(row => 
@@ -72,20 +71,32 @@ const StatCard = ({ title, value, icon, color }) => (
   </div>
 );
 
-// Transaction row component for detail table
+// Status badge component
+const StatusBadge = ({ status }) => {
+  const statusConfig = {
+    'Sukses': { bg: 'bg-green-100', text: 'text-green-700', icon: '✅' },
+    'Gagal Sistem Bank': { bg: 'bg-red-100', text: 'text-red-700', icon: '🏦' },
+    'Gagal Nasabah': { bg: 'bg-orange-100', text: 'text-orange-700', icon: '👤' },
+    'Gagal Sistem Jalin': { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: '🔗' }
+  };
+  
+  const config = statusConfig[status] || { bg: 'bg-gray-100', text: 'text-gray-700', icon: '❓' };
+  
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+      {config.icon} {status}
+    </span>
+  );
+};
+
+// Detail Transaction Row Component (individual transactions)
 const DetailTransactionRow = ({ data, index }) => (
   <tr className={`border-b hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-    <td className="py-2 px-3 text-center text-gray-600 text-sm">{data.no || index + 1}</td>
+    <td className="py-2 px-3 text-center text-gray-600 text-sm">{index + 1}</td>
+    <td className="py-2 px-3 text-gray-500 text-sm">{data.data_date || '-'}</td>
     <td className="py-2 px-3 font-medium text-blue-600 text-sm">{data.terminal_id}</td>
     <td className="py-2 px-3 text-gray-700 text-sm">{data.terminal_location}</td>
-    <td className="py-2 px-3 text-right text-green-600 font-semibold text-sm">{formatNumber(data.sukses)}</td>
-    <td className="py-2 px-3 text-right text-red-500 text-sm">{formatNumber(data.gagal_sistem_bank)}</td>
-    <td className="py-2 px-3 text-right text-orange-500 text-sm">{formatNumber(data.gagal_nasabah)}</td>
-    <td className="py-2 px-3 text-right text-yellow-600 text-sm">{formatNumber(data.gagal_sistem_jalin)}</td>
-    <td className="py-2 px-3 text-right font-semibold text-sm">{formatNumber(data.total_transaksi_ditagihkan)}</td>
-    <td className="py-2 px-3 text-right text-purple-600 text-sm">{formatRupiah(data.biaya_gross)}</td>
-    <td className="py-2 px-3 text-right text-sm">{data.proporsi_repay}%</td>
-    <td className="py-2 px-3 text-right text-blue-600 font-semibold text-sm">{formatRupiah(data.repay_nominal)}</td>
+    <td className="py-2 px-3"><StatusBadge status={data.status} /></td>
   </tr>
 );
 
@@ -139,10 +150,11 @@ const ExportButtons = ({ onExportCSV, onExportExcel, disabled }) => (
   </div>
 );
 
-// File Upload Component
+// File Upload Component with Date field
 const FileUpload = ({ onUploadSuccess }) => {
   const [file, setFile] = useState(null);
   const [period, setPeriod] = useState('');
+  const [dataDate, setDataDate] = useState('');
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -153,12 +165,18 @@ const FileUpload = ({ onUploadSuccess }) => {
       return;
     }
 
+    if (!dataDate) {
+      setMessage({ type: 'error', text: 'Masukkan tanggal data' });
+      return;
+    }
+
     setUploading(true);
     setMessage(null);
 
     const formData = new FormData();
     formData.append('file', file);
     if (period) formData.append('period', period);
+    formData.append('data_date', dataDate);
 
     try {
       const response = await axios.post(`${API}/report/upload`, formData, {
@@ -168,10 +186,11 @@ const FileUpload = ({ onUploadSuccess }) => {
       if (response.data.success) {
         setMessage({ 
           type: 'success', 
-          text: `Berhasil upload ${response.data.total_transactions} transaksi untuk periode ${response.data.period}` 
+          text: `Berhasil upload ${response.data.total_transactions} transaksi untuk tanggal ${response.data.data_date}` 
         });
         setFile(null);
         setPeriod('');
+        setDataDate('');
         if (onUploadSuccess) onUploadSuccess(response.data.report_id);
       } else {
         setMessage({ type: 'warning', text: response.data.message });
@@ -184,13 +203,19 @@ const FileUpload = ({ onUploadSuccess }) => {
     }
   };
 
+  // Format date for display
+  const formatDateForInput = (date) => {
+    const d = new Date(date);
+    return d.toISOString().split('T')[0];
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-lg p-6" data-testid="file-upload-section">
       <h3 className="text-lg font-bold text-gray-800 mb-4">📤 Upload Laporan Baru</h3>
       
       <form onSubmit={handleUpload} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">File Laporan (.txt, .csv)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">File Laporan (.txt, .csv) *</label>
           <input
             type="file"
             accept=".txt,.csv"
@@ -198,6 +223,18 @@ const FileUpload = ({ onUploadSuccess }) => {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             data-testid="file-input"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">📅 Tanggal Data *</label>
+          <input
+            type="date"
+            value={dataDate}
+            onChange={(e) => setDataDate(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            data-testid="date-input"
+          />
+          <p className="text-xs text-gray-500 mt-1">Tanggal saat data transaksi diambil</p>
         </div>
         
         <div>
@@ -214,9 +251,9 @@ const FileUpload = ({ onUploadSuccess }) => {
 
         <button
           type="submit"
-          disabled={uploading || !file}
+          disabled={uploading || !file || !dataDate}
           className={`w-full py-3 rounded-lg font-medium transition-all ${
-            uploading || !file
+            uploading || !file || !dataDate
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
@@ -252,10 +289,10 @@ const ReportSelector = ({ reports, selectedReport, onSelectReport }) => {
         className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
         data-testid="report-select"
       >
-        <option value="">-- Data Awal --</option>
+        <option value="">-- Data Awal (25-12-2025) --</option>
         {reports.map((report) => (
           <option key={report.id} value={report.id}>
-            {report.period} - {report.filename} ({new Date(report.upload_date).toLocaleDateString('id-ID')})
+            {report.data_date || '-'} | {report.period} - {report.filename}
           </option>
         ))}
       </select>
@@ -265,14 +302,15 @@ const ReportSelector = ({ reports, selectedReport, onSelectReport }) => {
 
 function App() {
   const [summary, setSummary] = useState(null);
-  const [transactions, setTransactions] = useState([]);
+  const [detailTransactions, setDetailTransactions] = useState([]);
   const [terminalSummary, setTerminalSummary] = useState([]);
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [detailSearchTerm, setDetailSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [terminalSearchTerm, setTerminalSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -301,25 +339,24 @@ function App() {
     }
   }, [selectedReport]);
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchDetailTransactions = useCallback(async () => {
     try {
       const params = new URLSearchParams({
         page: currentPage,
-        limit: 20,
-        search: searchTerm,
-        sort_by: 'terminal_id',
-        sort_order: 'asc'
+        limit: 100,
+        search: detailSearchTerm,
+        status_filter: statusFilter
       });
       if (selectedReport) params.append('report_id', selectedReport);
 
-      const response = await axios.get(`${API}/report/transactions?${params}`);
-      setTransactions(response.data.data || []);
+      const response = await axios.get(`${API}/report/transactions-detail?${params}`);
+      setDetailTransactions(response.data.data || []);
       setTotalPages(response.data.pages || 1);
       setTotalTransactions(response.data.total || 0);
     } catch (e) {
       console.error(e);
     }
-  }, [currentPage, searchTerm, selectedReport]);
+  }, [currentPage, detailSearchTerm, statusFilter, selectedReport]);
 
   const fetchTerminalSummary = useCallback(async () => {
     try {
@@ -338,26 +375,33 @@ function App() {
       setLoading(true);
       await fetchReports();
       await fetchSummary();
-      await fetchTransactions();
+      await fetchDetailTransactions();
       await fetchTerminalSummary();
       setLoading(false);
     };
     loadData();
-  }, [fetchReports, fetchSummary, fetchTransactions, fetchTerminalSummary]);
+  }, [fetchReports, fetchSummary, fetchDetailTransactions, fetchTerminalSummary]);
 
   useEffect(() => {
     if (!loading) {
       fetchSummary();
-      fetchTransactions();
+      fetchDetailTransactions();
       fetchTerminalSummary();
     }
-  }, [selectedReport, fetchSummary, fetchTransactions, fetchTerminalSummary, loading]);
+  }, [selectedReport, fetchSummary, fetchDetailTransactions, fetchTerminalSummary, loading]);
 
   useEffect(() => {
     if (!loading) {
-      fetchTransactions();
+      setCurrentPage(1);
+      fetchDetailTransactions();
     }
-  }, [currentPage, searchTerm, fetchTransactions, loading]);
+  }, [detailSearchTerm, statusFilter, fetchDetailTransactions, loading]);
+
+  useEffect(() => {
+    if (!loading) {
+      fetchDetailTransactions();
+    }
+  }, [currentPage, fetchDetailTransactions, loading]);
 
   useEffect(() => {
     if (!loading) {
@@ -374,23 +418,20 @@ function App() {
   const handleExportDetailCSV = async () => {
     setExporting(true);
     try {
-      const params = new URLSearchParams({ search: searchTerm });
+      const params = new URLSearchParams({ 
+        search: detailSearchTerm,
+        status_filter: statusFilter
+      });
       if (selectedReport) params.append('report_id', selectedReport);
       
-      const response = await axios.get(`${API}/report/transactions/export?${params}`);
+      const response = await axios.get(`${API}/report/transactions-detail/export?${params}`);
       const data = response.data.data || [];
       
       const columns = [
+        { key: 'data_date', label: 'Tanggal Data' },
         { key: 'terminal_id', label: 'Terminal ID' },
         { key: 'terminal_location', label: 'Lokasi' },
-        { key: 'sukses', label: 'Sukses' },
-        { key: 'gagal_sistem_bank', label: 'Gagal Bank' },
-        { key: 'gagal_nasabah', label: 'Gagal Nasabah' },
-        { key: 'gagal_sistem_jalin', label: 'Gagal Jalin' },
-        { key: 'total_transaksi_ditagihkan', label: 'Total Ditagih' },
-        { key: 'biaya_gross', label: 'Biaya Gross' },
-        { key: 'proporsi_repay', label: 'Proporsi (%)' },
-        { key: 'repay_nominal', label: 'Repay Nominal' }
+        { key: 'status', label: 'Status' }
       ];
       
       exportToCSV(data, `detail_transaksi_${summary?.period || 'data'}`, columns);
@@ -404,23 +445,20 @@ function App() {
   const handleExportDetailExcel = async () => {
     setExporting(true);
     try {
-      const params = new URLSearchParams({ search: searchTerm });
+      const params = new URLSearchParams({ 
+        search: detailSearchTerm,
+        status_filter: statusFilter
+      });
       if (selectedReport) params.append('report_id', selectedReport);
       
-      const response = await axios.get(`${API}/report/transactions/export?${params}`);
+      const response = await axios.get(`${API}/report/transactions-detail/export?${params}`);
       const data = response.data.data || [];
       
       const columns = [
+        { key: 'data_date', label: 'Tanggal Data' },
         { key: 'terminal_id', label: 'Terminal ID' },
         { key: 'terminal_location', label: 'Lokasi' },
-        { key: 'sukses', label: 'Sukses' },
-        { key: 'gagal_sistem_bank', label: 'Gagal Bank' },
-        { key: 'gagal_nasabah', label: 'Gagal Nasabah' },
-        { key: 'gagal_sistem_jalin', label: 'Gagal Jalin' },
-        { key: 'total_transaksi_ditagihkan', label: 'Total Ditagih' },
-        { key: 'biaya_gross', label: 'Biaya Gross' },
-        { key: 'proporsi_repay', label: 'Proporsi (%)' },
-        { key: 'repay_nominal', label: 'Repay Nominal' }
+        { key: 'status', label: 'Status' }
       ];
       
       exportToExcel(data, `detail_transaksi_${summary?.period || 'data'}`, columns);
@@ -645,20 +683,29 @@ function App() {
 
         {activeTab === 'detail' && (
           <section data-testid="detail-section">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-              <h2 className="text-xl font-bold text-gray-800">📋 Detail Semua Transaksi ({formatNumber(totalTransactions)} data)</h2>
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+              <h2 className="text-xl font-bold text-gray-800">📋 Detail Transaksi ({formatNumber(totalTransactions)} transaksi)</h2>
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
                 <input
                   type="text"
                   placeholder="Cari terminal ID atau lokasi..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-64"
-                  data-testid="search-input"
+                  value={detailSearchTerm}
+                  onChange={(e) => setDetailSearchTerm(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-56"
+                  data-testid="detail-search-input"
                 />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  data-testid="status-filter"
+                >
+                  <option value="">Semua Status</option>
+                  <option value="Sukses">✅ Sukses</option>
+                  <option value="Gagal Sistem Bank">🏦 Gagal Sistem Bank</option>
+                  <option value="Gagal Nasabah">👤 Gagal Nasabah</option>
+                  <option value="Gagal Sistem Jalin">🔗 Gagal Sistem Jalin</option>
+                </select>
                 <ExportButtons 
                   onExportCSV={handleExportDetailCSV}
                   onExportExcel={handleExportDetailExcel}
@@ -671,22 +718,16 @@ function App() {
               <table className="w-full text-sm">
                 <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
                   <tr>
-                    <th className="py-3 px-3 text-center">No</th>
-                    <th className="py-3 px-3 text-left">Terminal ID ↑</th>
+                    <th className="py-3 px-3 text-center w-16">No</th>
+                    <th className="py-3 px-3 text-left">Tanggal Data</th>
+                    <th className="py-3 px-3 text-left">Terminal ID</th>
                     <th className="py-3 px-3 text-left">Lokasi</th>
-                    <th className="py-3 px-3 text-right">Sukses</th>
-                    <th className="py-3 px-3 text-right">Gagal Bank</th>
-                    <th className="py-3 px-3 text-right">Gagal Nasabah</th>
-                    <th className="py-3 px-3 text-right">Gagal Jalin</th>
-                    <th className="py-3 px-3 text-right">Total Ditagih</th>
-                    <th className="py-3 px-3 text-right">Biaya Gross</th>
-                    <th className="py-3 px-3 text-right">Proporsi</th>
-                    <th className="py-3 px-3 text-right">Repay Nominal</th>
+                    <th className="py-3 px-3 text-left">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((t, idx) => (
-                    <DetailTransactionRow key={t.id || t.terminal_id + idx} data={t} index={(currentPage - 1) * 20 + idx} />
+                  {detailTransactions.map((t, idx) => (
+                    <DetailTransactionRow key={`${t.terminal_id}-${t.status}-${idx}`} data={t} index={(currentPage - 1) * 100 + idx} />
                   ))}
                 </tbody>
               </table>
@@ -840,8 +881,8 @@ function App() {
                   {reports.map((report) => (
                     <div key={report.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <div>
-                        <p className="font-semibold text-gray-800">{report.period}</p>
-                        <p className="text-sm text-gray-500">{report.filename}</p>
+                        <p className="font-semibold text-gray-800">📅 {report.data_date || '-'}</p>
+                        <p className="text-sm text-gray-600">{report.period} - {report.filename}</p>
                         <p className="text-xs text-gray-400">
                           Upload: {new Date(report.upload_date).toLocaleDateString('id-ID', { 
                             day: 'numeric', 
