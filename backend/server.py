@@ -390,12 +390,14 @@ def expand_transactions(summary_data: list, data_date: str = None) -> list:
         terminal_id = item.get('terminal_id', '')
         terminal_location = item.get('terminal_location', '')
         date = data_date or item.get('data_date', '-')
+        bank = get_bank_name(terminal_id)
         
         # Add sukses transactions
         for i in range(item.get('sukses', 0)):
             expanded.append({
                 "terminal_id": terminal_id,
                 "terminal_location": terminal_location,
+                "bank": bank,
                 "status": "Sukses",
                 "data_date": date
             })
@@ -405,6 +407,7 @@ def expand_transactions(summary_data: list, data_date: str = None) -> list:
             expanded.append({
                 "terminal_id": terminal_id,
                 "terminal_location": terminal_location,
+                "bank": bank,
                 "status": "Gagal Sistem Bank",
                 "data_date": date
             })
@@ -414,6 +417,7 @@ def expand_transactions(summary_data: list, data_date: str = None) -> list:
             expanded.append({
                 "terminal_id": terminal_id,
                 "terminal_location": terminal_location,
+                "bank": bank,
                 "status": "Gagal Nasabah",
                 "data_date": date
             })
@@ -423,6 +427,7 @@ def expand_transactions(summary_data: list, data_date: str = None) -> list:
             expanded.append({
                 "terminal_id": terminal_id,
                 "terminal_location": terminal_location,
+                "bank": bank,
                 "status": "Gagal Sistem Jalin",
                 "data_date": date
             })
