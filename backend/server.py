@@ -715,7 +715,7 @@ async def get_terminal_summary(report_id: Optional[str] = None, search: str = ""
 
 
 @api_router.post("/report/upload")
-async def upload_report(file: UploadFile = File(...), period: str = Form(None), bank_code: str = Form("008 - MDR")):
+async def upload_report(file: UploadFile = File(...), period: str = Form(None), bank_code: str = Form("008 - MDR"), data_date: str = Form(None)):
     """Upload and process a report file"""
     
     # Read file content
@@ -735,6 +735,7 @@ async def upload_report(file: UploadFile = File(...), period: str = Form(None), 
     # Use provided values or detected ones
     final_period = period if period else detected_period
     final_bank = bank_code if bank_code != "008 - MDR" else detected_bank
+    final_data_date = data_date if data_date else datetime.now(timezone.utc).strftime("%d-%m-%Y")
     
     if not transactions:
         # If parsing failed, store raw data and let user know
@@ -745,6 +746,7 @@ async def upload_report(file: UploadFile = File(...), period: str = Form(None), 
             "filename": file.filename,
             "period": final_period,
             "bank_code": final_bank,
+            "data_date": final_data_date,
             "upload_date": datetime.now(timezone.utc).isoformat(),
             "total_terminals": 0,
             "total_transaksi_sukses": 0,
@@ -771,6 +773,7 @@ async def upload_report(file: UploadFile = File(...), period: str = Form(None), 
         "filename": file.filename,
         "period": final_period,
         "bank_code": final_bank,
+        "data_date": final_data_date,
         "upload_date": datetime.now(timezone.utc).isoformat(),
         "total_terminals": len(transactions),
         "total_transaksi_sukses": total_sukses,
@@ -783,6 +786,7 @@ async def upload_report(file: UploadFile = File(...), period: str = Form(None), 
     for t in transactions:
         t['id'] = str(uuid.uuid4())
         t['report_id'] = report_id
+        t['data_date'] = final_data_date
     
     if transactions:
         await db.transactions.insert_many(transactions)
@@ -793,6 +797,7 @@ async def upload_report(file: UploadFile = File(...), period: str = Form(None), 
         "report_id": report_id,
         "filename": file.filename,
         "period": final_period,
+        "data_date": final_data_date,
         "total_transactions": len(transactions),
         "total_sukses": total_sukses,
         "total_repay_nominal": total_repay
