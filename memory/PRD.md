@@ -58,6 +58,7 @@ User meminta aplikasi dashboard untuk mengelola laporan transaksi ATM REPAY deng
 ### 6. Hapus Data ✅ (Implemented: 13 Jan 2026)
 - Hapus laporan individual dengan konfirmasi
 - Hapus semua data dengan double konfirmasi
+- Tombol "Muat Data Awal" untuk inisialisasi data awal ke database
 
 ### 7. Bank Detection ✅
 - T02 = Mandiri
@@ -65,6 +66,20 @@ User meminta aplikasi dashboard untuk mengelola laporan transaksi ATM REPAY deng
 - T09 = BNI
 - T20 = BTN
 - Others = BRI
+
+### 8. Filter Tanggal di Overview ✅ (Implemented: 13 Jan 2026)
+- Dropdown pilihan tanggal (default: Semua Tanggal)
+- Data terfilter sesuai tanggal yang dipilih
+
+### 9. Ringkasan Transaksi per Bank ✅ (Implemented: 13 Jan 2026)
+- Tabel ringkasan transaksi per bank (Mandiri, BNI, BRI, BTN)
+- Menampilkan: Terminal, Total Transaksi, Sukses, Gagal, Success Rate, Total Repay
+
+### 10. Indikator Warna Terminal ✅ (Implemented: 13 Jan 2026)
+- ≥100 transaksi: Hijau
+- 75-99 transaksi: Biru
+- 60-74 transaksi: Kuning
+- <60 transaksi: Merah
 
 ## API Endpoints
 
