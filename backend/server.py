@@ -557,9 +557,6 @@ async def get_summary_by_bank(
     """Get transaction summary grouped by bank with date range filter"""
     
     transactions = await filter_transactions_by_date_range({}, date_from, date_to)
-        query["data_date"] = date_filter
-    
-    transactions = await db.transactions.find(query, {"_id": 0}).to_list(10000)
     
     if not transactions:
         return {"data": [], "total_all_banks": 0}
