@@ -668,6 +668,9 @@ const ReportSelector = ({ reports, selectedReport, onSelectReport }) => {
 
 function App() {
   const [summary, setSummary] = useState(null);
+  const [bankSummary, setBankSummary] = useState([]);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [selectedDate, setSelectedDate] = useState('');
   const [detailTransactions, setDetailTransactions] = useState([]);
   const [terminalSummary, setTerminalSummary] = useState([]);
   const [reports, setReports] = useState([]);
@@ -684,6 +687,14 @@ function App() {
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+
+  const fetchAvailableDates = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API}/available-dates`);
+      setAvailableDates(response.data.dates || []);
+    } catch (e) { console.error(e); }
+  }, []);
 
   const fetchReports = useCallback(async () => {
     try {
@@ -694,11 +705,22 @@ function App() {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const url = selectedReport ? `${API}/report/summary?report_id=${selectedReport}` : `${API}/report/summary`;
-      const response = await axios.get(url);
+      const params = new URLSearchParams();
+      if (selectedReport) params.append('report_id', selectedReport);
+      if (selectedDate) params.append('date_filter', selectedDate);
+      const response = await axios.get(`${API}/report/summary?${params}`);
       setSummary(response.data);
     } catch (e) { setError('Gagal memuat data.'); }
-  }, [selectedReport]);
+  }, [selectedReport, selectedDate]);
+
+  const fetchBankSummary = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedDate) params.append('date_filter', selectedDate);
+      const response = await axios.get(`${API}/report/summary-by-bank?${params}`);
+      setBankSummary(response.data.data || []);
+    } catch (e) { console.error(e); }
+  }, [selectedDate]);
 
   const fetchDetailTransactions = useCallback(async () => {
     try {
@@ -720,24 +742,41 @@ function App() {
     } catch (e) { console.error(e); }
   }, [terminalSearchTerm, selectedReport]);
 
+  const initializeData = async () => {
+    setInitializing(true);
+    try {
+      await axios.post(`${API}/init-data`);
+      await fetchReports();
+      await fetchAvailableDates();
+      await fetchSummary();
+      await fetchBankSummary();
+      await fetchDetailTransactions();
+      await fetchTerminalSummary();
+    } catch (e) { console.error(e); }
+    finally { setInitializing(false); }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       await fetchReports();
+      await fetchAvailableDates();
       await fetchSummary();
+      await fetchBankSummary();
       await fetchDetailTransactions();
       await fetchTerminalSummary();
       setLoading(false);
     };
     loadData();
-  }, [fetchReports, fetchSummary, fetchDetailTransactions, fetchTerminalSummary]);
+  }, [fetchReports, fetchAvailableDates, fetchSummary, fetchBankSummary, fetchDetailTransactions, fetchTerminalSummary]);
 
-  useEffect(() => { if (!loading) { fetchSummary(); fetchDetailTransactions(); fetchTerminalSummary(); } }, [selectedReport, fetchSummary, fetchDetailTransactions, fetchTerminalSummary, loading]);
+  useEffect(() => { if (!loading) { fetchSummary(); fetchBankSummary(); fetchDetailTransactions(); fetchTerminalSummary(); } }, [selectedReport, fetchSummary, fetchBankSummary, fetchDetailTransactions, fetchTerminalSummary, loading]);
+  useEffect(() => { if (!loading) { fetchSummary(); fetchBankSummary(); } }, [selectedDate, fetchSummary, fetchBankSummary, loading]);
   useEffect(() => { if (!loading) { setCurrentPage(1); fetchDetailTransactions(); } }, [detailSearchTerm, statusFilter, fetchDetailTransactions, loading]);
   useEffect(() => { if (!loading) { fetchDetailTransactions(); } }, [currentPage, fetchDetailTransactions, loading]);
   useEffect(() => { if (!loading) { fetchTerminalSummary(); } }, [terminalSearchTerm, fetchTerminalSummary, loading]);
 
-  const handleUploadSuccess = (reportId) => { fetchReports(); setSelectedReport(reportId); };
+  const handleUploadSuccess = (reportId) => { fetchReports(); fetchAvailableDates(); setSelectedReport(reportId); };
 
   const handleDeleteReport = async (reportId) => {
     if (!window.confirm('Yakin ingin menghapus laporan ini? Data transaksi terkait juga akan dihapus.')) return;
