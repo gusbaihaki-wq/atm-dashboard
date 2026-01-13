@@ -723,20 +723,22 @@ function App() {
     try {
       const params = new URLSearchParams();
       if (selectedReport) params.append('report_id', selectedReport);
-      if (selectedDate) params.append('date_filter', selectedDate);
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
       const response = await axios.get(`${API}/report/summary?${params}`);
       setSummary(response.data);
     } catch (e) { setError('Gagal memuat data.'); }
-  }, [selectedReport, selectedDate]);
+  }, [selectedReport, dateFrom, dateTo]);
 
   const fetchBankSummary = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (selectedDate) params.append('date_filter', selectedDate);
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
       const response = await axios.get(`${API}/report/summary-by-bank?${params}`);
       setBankSummary(response.data.data || []);
     } catch (e) { console.error(e); }
-  }, [selectedDate]);
+  }, [dateFrom, dateTo]);
 
   const fetchDetailTransactions = useCallback(async () => {
     try {
