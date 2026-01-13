@@ -827,7 +827,8 @@ function App() {
     try {
       await axios.delete(`${API}/reports/clear-all`);
       setSelectedReport(null);
-      setSelectedDate('');
+      setDateFrom('');
+      setDateTo('');
       setReports([]);
       setBankSummary([]);
       setAvailableDates([]);
