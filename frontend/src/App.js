@@ -789,7 +789,7 @@ function App() {
   }, [fetchReports, fetchAvailableDates, fetchSummary, fetchBankSummary, fetchDetailTransactions, fetchTerminalSummary]);
 
   useEffect(() => { if (!loading) { fetchSummary(); fetchBankSummary(); fetchDetailTransactions(); fetchTerminalSummary(); } }, [selectedReport, fetchSummary, fetchBankSummary, fetchDetailTransactions, fetchTerminalSummary, loading]);
-  useEffect(() => { if (!loading) { fetchSummary(); fetchBankSummary(); } }, [selectedDate, fetchSummary, fetchBankSummary, loading]);
+  useEffect(() => { if (!loading) { fetchSummary(); fetchBankSummary(); } }, [dateFrom, dateTo, fetchSummary, fetchBankSummary, loading]);
   useEffect(() => { if (!loading) { setCurrentPage(1); fetchDetailTransactions(); } }, [detailSearchTerm, statusFilter, fetchDetailTransactions, loading]);
   useEffect(() => { if (!loading) { fetchDetailTransactions(); } }, [currentPage, fetchDetailTransactions, loading]);
   useEffect(() => { if (!loading) { fetchTerminalSummary(); } }, [terminalSearchTerm, fetchTerminalSummary, loading]);
