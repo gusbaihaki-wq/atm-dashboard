@@ -1037,7 +1037,9 @@ async def create_atm_activation(data: ATMActivationCreate):
     }
     
     await db.atm_activations.insert_one(activation)
-    return {"success": True, "data": activation}
+    
+    # Return clean data without _id
+    return {"success": True, "data": {k: v for k, v in activation.items() if k != "_id"}}
 
 
 @api_router.put("/atm-activation/{activation_id}")
