@@ -1108,6 +1108,30 @@ function App() {
                 <ExportButtons onExportCSV={handleExportTerminalCSV} onExportExcel={handleExportTerminalExcel} disabled={terminalSummary.length === 0} />
               </div>
             </div>
+            
+            {/* Legend/Keterangan Warna */}
+            <div className="bg-white rounded-lg shadow p-3 mb-4 flex flex-wrap gap-4 items-center">
+              <span className="font-medium text-gray-700 text-sm">Keterangan Total Transaksi:</span>
+              <div className="flex flex-wrap gap-3">
+                <span className="flex items-center gap-1 text-xs">
+                  <span className="w-4 h-4 rounded-full bg-green-500"></span>
+                  <span>≥100 (Hijau)</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs">
+                  <span className="w-4 h-4 rounded-full bg-blue-500"></span>
+                  <span>75-99 (Biru)</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs">
+                  <span className="w-4 h-4 rounded-full bg-yellow-400"></span>
+                  <span>60-74 (Kuning)</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs">
+                  <span className="w-4 h-4 rounded-full bg-red-500"></span>
+                  <span>&lt;60 (Merah)</span>
+                </span>
+              </div>
+            </div>
+
             <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
