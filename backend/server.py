@@ -708,7 +708,8 @@ async def get_terminal_summary(report_id: Optional[str] = None, search: str = ""
     if search:
         transactions = [t for t in transactions if 
                        search.lower() in t.get('terminal_id', '').lower() or 
-                       search.lower() in t.get('terminal_location', '').lower()]
+                       search.lower() in t.get('terminal_location', '').lower() or
+                       search.lower() in get_bank_name(t.get('terminal_id', '')).lower()]
     
     # Calculate summary per terminal
     terminal_summary = []
@@ -719,6 +720,7 @@ async def get_terminal_summary(report_id: Optional[str] = None, search: str = ""
         terminal_summary.append({
             "terminal_id": t.get('terminal_id', ''),
             "terminal_location": t.get('terminal_location', ''),
+            "bank": get_bank_name(t.get('terminal_id', '')),
             "total_transaksi": total_transaksi,
             "sukses": t.get('sukses', 0),
             "gagal": t.get('gagal_sistem_bank', 0) + t.get('gagal_nasabah', 0) + t.get('gagal_sistem_jalin', 0),
