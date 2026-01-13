@@ -1059,21 +1059,30 @@ function App() {
         {activeTab === 'upload' && (
           <div className="max-w-2xl mx-auto space-y-6">
             <FileUpload onUploadSuccess={handleUploadSuccess} />
+            
+            {/* Tombol Hapus Semua Data - selalu tampil */}
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-semibold text-red-800">🗑️ Manajemen Data</h4>
+                  <p className="text-sm text-red-600">Hapus semua data laporan dan transaksi dari database</p>
+                </div>
+                <button
+                  onClick={handleClearAllData}
+                  disabled={clearingAll}
+                  className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+                    clearingAll ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
+                  data-testid="clear-all-data-btn"
+                >
+                  {clearingAll ? '⏳ Menghapus...' : '🗑️ Hapus Semua Data'}
+                </button>
+              </div>
+            </div>
+
             {reports.length > 0 && (
               <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-gray-800">📁 Laporan Diupload ({reports.length})</h3>
-                  <button
-                    onClick={handleClearAllData}
-                    disabled={clearingAll}
-                    className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
-                      clearingAll ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'
-                    }`}
-                    data-testid="clear-all-data-btn"
-                  >
-                    {clearingAll ? '⏳ Menghapus...' : '🗑️ Hapus Semua'}
-                  </button>
-                </div>
+                <h3 className="text-lg font-bold text-gray-800 mb-4">📁 Laporan Diupload ({reports.length})</h3>
                 <div className="space-y-3">
                   {reports.map((r) => (
                     <div key={r.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
