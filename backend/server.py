@@ -367,6 +367,21 @@ async def get_report_summary(report_id: Optional[str] = None):
     return calculate_summary(INITIAL_REPORT_DATA, period="Desember 2025", bank_code="008 - MDR")
 
 
+def get_bank_name(terminal_id: str) -> str:
+    """Get bank name from terminal ID prefix"""
+    if not terminal_id:
+        return "Unknown"
+    
+    prefix = terminal_id[:3].upper()
+    bank_mapping = {
+        "T08": "Mandiri",
+        "T09": "BNI",
+        "T20": "BTN",
+        "T02": "BRI"
+    }
+    return bank_mapping.get(prefix, "Unknown")
+
+
 def expand_transactions(summary_data: list, data_date: str = None) -> list:
     """Expand summary transactions into individual transaction rows"""
     expanded = []
