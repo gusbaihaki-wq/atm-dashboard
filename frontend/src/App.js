@@ -682,6 +682,8 @@ function App() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalTransactions, setTotalTransactions] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const fetchReports = useCallback(async () => {
     try {
