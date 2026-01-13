@@ -946,26 +946,40 @@ function App() {
 
         {activeTab === 'overview' && (
           <div className="space-y-8">
-            {/* Filter Tanggal */}
+            {/* Filter Tanggal Range */}
             <section className="bg-white rounded-xl shadow-lg p-4">
               <div className="flex flex-wrap items-center gap-4">
+                <span className="font-medium text-gray-700">📅 Filter Tanggal:</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-700">📅 Filter Tanggal:</span>
+                  <label className="text-sm text-gray-600">Dari:</label>
                   <select 
-                    value={selectedDate} 
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    value={dateFrom} 
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Semua Tanggal</option>
+                    <option value="">-- Pilih --</option>
                     {availableDates.map((date) => (
                       <option key={date} value={date}>{date}</option>
                     ))}
                   </select>
                 </div>
-                {selectedDate && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Sampai:</label>
+                  <select 
+                    value={dateTo} 
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Pilih --</option>
+                    {availableDates.map((date) => (
+                      <option key={date} value={date}>{date}</option>
+                    ))}
+                  </select>
+                </div>
+                {(dateFrom || dateTo) && (
                   <button 
-                    onClick={() => setSelectedDate('')}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                    onClick={() => { setDateFrom(''); setDateTo(''); }}
+                    className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
                   >
                     ✕ Reset Filter
                   </button>
