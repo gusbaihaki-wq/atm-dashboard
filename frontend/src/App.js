@@ -1061,18 +1061,41 @@ function App() {
             <FileUpload onUploadSuccess={handleUploadSuccess} />
             {reports.length > 0 && (
               <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">📁 Laporan Diupload</h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">📁 Laporan Diupload ({reports.length})</h3>
+                  <button
+                    onClick={handleClearAllData}
+                    disabled={clearingAll}
+                    className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+                      clearingAll ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'
+                    }`}
+                    data-testid="clear-all-data-btn"
+                  >
+                    {clearingAll ? '⏳ Menghapus...' : '🗑️ Hapus Semua'}
+                  </button>
+                </div>
                 <div className="space-y-3">
                   {reports.map((r) => (
-                    <div key={r.id} className="flex justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
+                    <div key={r.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <div className="flex-1">
                         <p className="font-semibold">📅 {r.data_date || '-'}</p>
                         <p className="text-sm text-gray-600">{r.period} - {r.filename}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right mr-4">
                         <p className="text-sm">{formatNumber(r.total_terminals)} Terminal</p>
                         <p className="text-sm text-green-600">{formatNumber(r.total_transaksi_sukses)} Sukses</p>
                       </div>
+                      <button
+                        onClick={() => handleDeleteReport(r.id)}
+                        disabled={deleting === r.id}
+                        className={`p-2 rounded-lg transition-colors ${
+                          deleting === r.id ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-100 text-red-600 hover:bg-red-200'
+                        }`}
+                        title="Hapus Laporan"
+                        data-testid={`delete-report-${r.id}`}
+                      >
+                        {deleting === r.id ? '⏳' : '🗑️'}
+                      </button>
                     </div>
                   ))}
                 </div>
