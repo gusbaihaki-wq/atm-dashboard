@@ -56,6 +56,24 @@ const exportToExcel = (data, filename, columns) => {
   link.click();
 };
 
+// Bank badge component
+const BankBadge = ({ bank }) => {
+  const bankConfig = {
+    'Mandiri': { bg: 'bg-blue-100', text: 'text-blue-700' },
+    'BNI': { bg: 'bg-orange-100', text: 'text-orange-700' },
+    'BTN': { bg: 'bg-green-100', text: 'text-green-700' },
+    'BRI': { bg: 'bg-indigo-100', text: 'text-indigo-700' }
+  };
+  
+  const config = bankConfig[bank] || { bg: 'bg-gray-100', text: 'text-gray-700' };
+  
+  return (
+    <span className={`px-2 py-1 rounded text-xs font-semibold ${config.bg} ${config.text}`}>
+      {bank}
+    </span>
+  );
+};
+
 // Card component for statistics
 const StatCard = ({ title, value, icon, color }) => (
   <div className={`bg-white rounded-xl shadow-lg p-6 border-l-4 ${color}`} data-testid={`stat-card-${title.toLowerCase().replace(/\s/g, '-')}`}>
@@ -94,6 +112,7 @@ const DetailTransactionRow = ({ data, index }) => (
   <tr className={`border-b hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
     <td className="py-2 px-3 text-center text-gray-600 text-sm">{index + 1}</td>
     <td className="py-2 px-3 text-gray-500 text-sm">{data.data_date || '-'}</td>
+    <td className="py-2 px-3"><BankBadge bank={data.bank} /></td>
     <td className="py-2 px-3 font-medium text-blue-600 text-sm">{data.terminal_id}</td>
     <td className="py-2 px-3 text-gray-700 text-sm">{data.terminal_location}</td>
     <td className="py-2 px-3"><StatusBadge status={data.status} /></td>
@@ -104,6 +123,7 @@ const DetailTransactionRow = ({ data, index }) => (
 const TerminalSummaryRow = ({ data, index }) => (
   <tr className={`border-b hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
     <td className="py-2 px-3 text-center text-gray-600 text-sm">{index + 1}</td>
+    <td className="py-2 px-3"><BankBadge bank={data.bank} /></td>
     <td className="py-2 px-3 font-medium text-blue-600 text-sm">{data.terminal_id}</td>
     <td className="py-2 px-3 text-gray-700 text-sm">{data.terminal_location}</td>
     <td className="py-2 px-3 text-right font-semibold text-sm">{formatNumber(data.total_transaksi)}</td>
@@ -201,12 +221,6 @@ const FileUpload = ({ onUploadSuccess }) => {
     } finally {
       setUploading(false);
     }
-  };
-
-  // Format date for display
-  const formatDateForInput = (date) => {
-    const d = new Date(date);
-    return d.toISOString().split('T')[0];
   };
 
   return (
@@ -429,6 +443,7 @@ function App() {
       
       const columns = [
         { key: 'data_date', label: 'Tanggal Data' },
+        { key: 'bank', label: 'Bank' },
         { key: 'terminal_id', label: 'Terminal ID' },
         { key: 'terminal_location', label: 'Lokasi' },
         { key: 'status', label: 'Status' }
@@ -456,6 +471,7 @@ function App() {
       
       const columns = [
         { key: 'data_date', label: 'Tanggal Data' },
+        { key: 'bank', label: 'Bank' },
         { key: 'terminal_id', label: 'Terminal ID' },
         { key: 'terminal_location', label: 'Lokasi' },
         { key: 'status', label: 'Status' }
@@ -472,6 +488,7 @@ function App() {
   // Export handlers for Terminal Summary
   const handleExportTerminalCSV = () => {
     const columns = [
+      { key: 'bank', label: 'Bank' },
       { key: 'terminal_id', label: 'Terminal ID' },
       { key: 'terminal_location', label: 'Lokasi' },
       { key: 'total_transaksi', label: 'Total Transaksi' },
@@ -488,6 +505,7 @@ function App() {
 
   const handleExportTerminalExcel = () => {
     const columns = [
+      { key: 'bank', label: 'Bank' },
       { key: 'terminal_id', label: 'Terminal ID' },
       { key: 'terminal_location', label: 'Lokasi' },
       { key: 'total_transaksi', label: 'Total Transaksi' },
@@ -688,7 +706,7 @@ function App() {
               <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
                 <input
                   type="text"
-                  placeholder="Cari terminal ID atau lokasi..."
+                  placeholder="Cari terminal/lokasi/bank..."
                   value={detailSearchTerm}
                   onChange={(e) => setDetailSearchTerm(e.target.value)}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-56"
@@ -720,6 +738,7 @@ function App() {
                   <tr>
                     <th className="py-3 px-3 text-center w-16">No</th>
                     <th className="py-3 px-3 text-left">Tanggal Data</th>
+                    <th className="py-3 px-3 text-left">Bank</th>
                     <th className="py-3 px-3 text-left">Terminal ID</th>
                     <th className="py-3 px-3 text-left">Lokasi</th>
                     <th className="py-3 px-3 text-left">Status</th>
@@ -763,7 +782,7 @@ function App() {
               <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
                 <input
                   type="text"
-                  placeholder="Cari terminal ID atau lokasi..."
+                  placeholder="Cari terminal/lokasi/bank..."
                   value={terminalSearchTerm}
                   onChange={(e) => setTerminalSearchTerm(e.target.value)}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-64"
@@ -782,6 +801,7 @@ function App() {
                 <thead className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
                   <tr>
                     <th className="py-3 px-3 text-center">No</th>
+                    <th className="py-3 px-3 text-left">Bank</th>
                     <th className="py-3 px-3 text-left">Terminal ID</th>
                     <th className="py-3 px-3 text-left">Lokasi</th>
                     <th className="py-3 px-3 text-right">Total Transaksi</th>
@@ -817,6 +837,7 @@ function App() {
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                   <tr>
                     <th className="py-4 px-4 text-center">Rank</th>
+                    <th className="py-4 px-4 text-left">Bank</th>
                     <th className="py-4 px-4 text-left">Terminal ID</th>
                     <th className="py-4 px-4 text-left">Lokasi</th>
                     <th className="py-4 px-4 text-right">Transaksi Sukses</th>
@@ -827,6 +848,7 @@ function App() {
                   {summary?.top_terminals?.map((terminal, idx) => (
                     <tr key={terminal.terminal_id} className="border-b hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-4 text-center text-gray-600">{idx + 1}</td>
+                      <td className="py-3 px-4"><BankBadge bank={terminal.bank} /></td>
                       <td className="py-3 px-4 font-medium text-blue-600">{terminal.terminal_id}</td>
                       <td className="py-3 px-4 text-gray-700">{terminal.terminal_location}</td>
                       <td className="py-3 px-4 text-right font-semibold text-green-600">{formatNumber(terminal.sukses)}</td>
@@ -847,6 +869,7 @@ function App() {
                 <thead className="bg-gradient-to-r from-orange-500 to-orange-600 text-white">
                   <tr>
                     <th className="py-4 px-4 text-center">Rank</th>
+                    <th className="py-4 px-4 text-left">Bank</th>
                     <th className="py-4 px-4 text-left">Terminal ID</th>
                     <th className="py-4 px-4 text-left">Lokasi</th>
                     <th className="py-4 px-4 text-right">Transaksi Sukses</th>
@@ -857,6 +880,7 @@ function App() {
                   {summary?.bottom_terminals?.map((terminal, idx) => (
                     <tr key={terminal.terminal_id} className="border-b hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-4 text-center text-gray-600">{idx + 1}</td>
+                      <td className="py-3 px-4"><BankBadge bank={terminal.bank} /></td>
                       <td className="py-3 px-4 font-medium text-blue-600">{terminal.terminal_id}</td>
                       <td className="py-3 px-4 text-gray-700">{terminal.terminal_location}</td>
                       <td className="py-3 px-4 text-right font-semibold text-green-600">{formatNumber(terminal.sukses)}</td>
