@@ -85,10 +85,13 @@ User meminta aplikasi dashboard untuk mengelola laporan transaksi ATM REPAY deng
 
 ### Reports
 - `GET /api/reports` - List all reports
-- `GET /api/report/summary` - Get summary
+- `GET /api/report/summary` - Get summary (with optional date_filter param)
+- `GET /api/report/summary-by-bank` - Get summary per bank
+- `GET /api/available-dates` - Get list of available dates
 - `GET /api/report/transactions-detail` - Get paginated transactions
 - `GET /api/report/terminal-summary` - Get terminal summary
 - `POST /api/report/upload` - Upload report file
+- `POST /api/init-data` - Initialize database with sample data
 - `DELETE /api/report/{report_id}` - Delete individual report
 - `DELETE /api/reports/clear-all` - Clear all reports
 
