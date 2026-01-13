@@ -387,39 +387,148 @@ async def get_all_reports():
     return {"reports": reports}
 
 
+@api_router.post("/init-data")
+async def initialize_data():
+    """Initialize database with sample data if empty"""
+    # Check if data already exists
+    existing = await db.transactions.count_documents({})
+    if existing > 0:
+        return {"success": False, "message": "Data already exists", "count": existing}
+    
+    # Create initial report
+    report_id = str(uuid.uuid4())
+    total_sukses = sum(t.get('sukses', 0) for t in INITIAL_REPORT_DATA)
+    total_repay = sum(t.get('repay_nominal', 0) for t in INITIAL_REPORT_DATA)
+    
+    report = {
+        "id": report_id,
+        "filename": "initial_data",
+        "period": "Desember 2025",
+        "bank_code": "008 - MDR",
+        "data_date": "25-12-2025",
+        "upload_date": datetime.now(timezone.utc).isoformat(),
+        "total_terminals": len(INITIAL_REPORT_DATA),
+        "total_transaksi_sukses": total_sukses,
+        "total_repay_nominal": total_repay,
+        "status": "completed"
+    }
+    await db.reports.insert_one(report)
+    
+    # Store transactions
+    transactions = []
+    for t in INITIAL_REPORT_DATA:
+        tx = t.copy()
+        tx['id'] = str(uuid.uuid4())
+        tx['report_id'] = report_id
+        tx['data_date'] = "25-12-2025"
+        transactions.append(tx)
+    
+    await db.transactions.insert_many(transactions)
+    
+    return {"success": True, "message": f"Initialized {len(transactions)} transactions", "report_id": report_id}
+
+
+@api_router.get("/available-dates")
+async def get_available_dates():
+    """Get list of available data dates"""
+    dates = await db.transactions.distinct("data_date")
+    return {"dates": sorted(dates, reverse=True)}
+
+
 @api_router.get("/report/summary")
-async def get_report_summary(report_id: Optional[str] = None):
-    """Get summary of ATM REPAY report. If report_id is provided, get specific report, otherwise get latest or initial data."""
+async def get_report_summary(report_id: Optional[str] = None, date_filter: Optional[str] = None):
+    """Get summary of ATM REPAY report with optional date filter"""
     
+    query = {}
     if report_id:
-        # Get specific report transactions
-        transactions = await db.transactions.find({"report_id": report_id}, {"_id": 0}).to_list(10000)
-        report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+        query["report_id"] = report_id
+    if date_filter:
+        query["data_date"] = date_filter
+    
+    # Get transactions based on query
+    transactions = await db.transactions.find(query, {"_id": 0}).to_list(10000)
+    
+    if transactions:
+        # Get report info if specific report
+        period = "Semua Periode"
+        bank_code = "008 - MDR"
+        if report_id:
+            report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+            if report:
+                period = report.get('period', 'Unknown')
+                bank_code = report.get('bank_code', '008 - MDR')
+        elif date_filter:
+            period = f"Tanggal: {date_filter}"
         
-        if not transactions:
-            raise HTTPException(status_code=404, detail="Report not found")
+        return calculate_summary(transactions, period=period, bank_code=bank_code, report_id=report_id)
+    
+    # If no transactions in DB, return empty summary
+    return {
+        "total_terminals": 0,
+        "total_transaksi_sukses": 0,
+        "total_gagal_sistem_bank": 0,
+        "total_gagal_nasabah": 0,
+        "total_gagal_sistem_jalin": 0,
+        "total_transaksi_ditagihkan": 0,
+        "total_biaya_gross": 0,
+        "total_repay_nominal": 0,
+        "avg_proporsi_repay": 0,
+        "top_terminals": [],
+        "bottom_terminals": [],
+        "proporsi_distribution": {},
+        "period": "Tidak ada data",
+        "bank_code": "008 - MDR",
+        "report_id": None
+    }
+
+
+@api_router.get("/report/summary-by-bank")
+async def get_summary_by_bank(date_filter: Optional[str] = None):
+    """Get transaction summary grouped by bank"""
+    
+    query = {}
+    if date_filter:
+        query["data_date"] = date_filter
+    
+    transactions = await db.transactions.find(query, {"_id": 0}).to_list(10000)
+    
+    if not transactions:
+        return {"data": [], "total_all_banks": 0}
+    
+    # Group by bank
+    bank_summary = {}
+    for t in transactions:
+        bank = get_bank_name(t.get('terminal_id', ''))
+        if bank not in bank_summary:
+            bank_summary[bank] = {
+                "bank": bank,
+                "total_terminals": 0,
+                "total_sukses": 0,
+                "total_gagal": 0,
+                "total_transaksi": 0,
+                "total_biaya_gross": 0,
+                "total_repay_nominal": 0
+            }
         
-        return calculate_summary(
-            transactions, 
-            period=report.get('period', 'Unknown') if report else 'Unknown',
-            bank_code=report.get('bank_code', '008 - MDR') if report else '008 - MDR',
-            report_id=report_id
-        )
+        bank_summary[bank]["total_terminals"] += 1
+        bank_summary[bank]["total_sukses"] += t.get('sukses', 0)
+        bank_summary[bank]["total_gagal"] += t.get('gagal_sistem_bank', 0) + t.get('gagal_nasabah', 0) + t.get('gagal_sistem_jalin', 0)
+        bank_summary[bank]["total_transaksi"] += t.get('sukses', 0) + t.get('gagal_sistem_bank', 0) + t.get('gagal_nasabah', 0) + t.get('gagal_sistem_jalin', 0)
+        bank_summary[bank]["total_biaya_gross"] += t.get('biaya_gross', 0)
+        bank_summary[bank]["total_repay_nominal"] += t.get('repay_nominal', 0)
     
-    # Check if there are any uploaded reports
-    latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
+    # Calculate success rate for each bank
+    result = []
+    for bank, data in bank_summary.items():
+        data["success_rate"] = round((data["total_sukses"] / data["total_transaksi"] * 100), 2) if data["total_transaksi"] > 0 else 0
+        result.append(data)
     
-    if latest_report:
-        transactions = await db.transactions.find({"report_id": latest_report['id']}, {"_id": 0}).to_list(10000)
-        return calculate_summary(
-            transactions,
-            period=latest_report.get('period', 'Unknown'),
-            bank_code=latest_report.get('bank_code', '008 - MDR'),
-            report_id=latest_report['id']
-        )
+    # Sort by total_transaksi descending
+    result.sort(key=lambda x: x["total_transaksi"], reverse=True)
     
-    # Return initial data if no uploads
-    return calculate_summary(INITIAL_REPORT_DATA, period="Desember 2025", bank_code="008 - MDR")
+    total_all = sum(d["total_transaksi"] for d in result)
+    
+    return {"data": result, "total_all_banks": total_all}
 
 
 def get_bank_name(terminal_id: str) -> str:
