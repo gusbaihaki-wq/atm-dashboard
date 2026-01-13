@@ -927,6 +927,44 @@ function App() {
 
         {activeTab === 'overview' && (
           <div className="space-y-8">
+            {/* Filter Tanggal */}
+            <section className="bg-white rounded-xl shadow-lg p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-gray-700">📅 Filter Tanggal:</span>
+                  <select 
+                    value={selectedDate} 
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Semua Tanggal</option>
+                    {availableDates.map((date) => (
+                      <option key={date} value={date}>{date}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedDate && (
+                  <button 
+                    onClick={() => setSelectedDate('')}
+                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  >
+                    ✕ Reset Filter
+                  </button>
+                )}
+                {summary?.total_terminals === 0 && (
+                  <button
+                    onClick={initializeData}
+                    disabled={initializing}
+                    className={`px-4 py-2 rounded-lg font-medium ${
+                      initializing ? 'bg-gray-300 text-gray-500' : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {initializing ? '⏳ Memuat...' : '📥 Muat Data Awal'}
+                  </button>
+                )}
+              </div>
+            </section>
+
             <section>
               <h2 className="text-xl font-bold text-gray-800 mb-4">📋 Ringkasan Transaksi</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -936,6 +974,50 @@ function App() {
                 <StatCard title="Gagal Jalin" value={formatNumber(summary?.total_gagal_sistem_jalin || 0)} icon="🔗" color="border-yellow-500" />
               </div>
             </section>
+
+            {/* Ringkasan per Bank */}
+            {bankSummary.length > 0 && (
+              <section>
+                <h2 className="text-xl font-bold text-gray-800 mb-4">🏦 Ringkasan Transaksi per Bank</h2>
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Bank</th>
+                        <th className="py-3 px-4 text-right">Terminal</th>
+                        <th className="py-3 px-4 text-right">Total Transaksi</th>
+                        <th className="py-3 px-4 text-right">Sukses</th>
+                        <th className="py-3 px-4 text-right">Gagal</th>
+                        <th className="py-3 px-4 text-right">Success Rate</th>
+                        <th className="py-3 px-4 text-right">Total Repay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bankSummary.map((bank, idx) => (
+                        <tr key={bank.bank} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                          <td className="py-3 px-4"><BankBadge bank={bank.bank} /></td>
+                          <td className="py-3 px-4 text-right font-medium">{formatNumber(bank.total_terminals)}</td>
+                          <td className="py-3 px-4 text-right font-semibold">{formatNumber(bank.total_transaksi)}</td>
+                          <td className="py-3 px-4 text-right text-green-600 font-semibold">{formatNumber(bank.total_sukses)}</td>
+                          <td className="py-3 px-4 text-right text-red-500">{formatNumber(bank.total_gagal)}</td>
+                          <td className="py-3 px-4 text-right">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              bank.success_rate >= 90 ? 'bg-green-100 text-green-700' :
+                              bank.success_rate >= 70 ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {bank.success_rate}%
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right text-blue-600 font-semibold">{formatRupiah(bank.total_repay_nominal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
             <section>
               <h2 className="text-xl font-bold text-gray-800 mb-4">💰 Ringkasan Keuangan</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
