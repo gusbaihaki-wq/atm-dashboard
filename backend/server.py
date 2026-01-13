@@ -432,21 +432,83 @@ async def initialize_data():
 async def get_available_dates():
     """Get list of available data dates"""
     dates = await db.transactions.distinct("data_date")
-    return {"dates": sorted(dates, reverse=True)}
+    # Sort dates properly (DD-MM-YYYY format)
+    def parse_date(d):
+        try:
+            parts = d.split('-')
+            return (int(parts[2]), int(parts[1]), int(parts[0]))  # year, month, day for sorting
+        except:
+            return (0, 0, 0)
+    return {"dates": sorted(dates, key=parse_date)}
+
+
+def build_date_query(date_from: Optional[str], date_to: Optional[str]) -> dict:
+    """Build MongoDB query for date range filtering"""
+    if not date_from and not date_to:
+        return {}
+    
+    # Get all dates and filter by range
+    # Since dates are in DD-MM-YYYY format, we need to compare properly
+    def parse_date(d):
+        try:
+            parts = d.split('-')
+            return (int(parts[2]), int(parts[1]), int(parts[0]))  # (year, month, day)
+        except:
+            return None
+    
+    date_from_parsed = parse_date(date_from) if date_from else None
+    date_to_parsed = parse_date(date_to) if date_to else None
+    
+    return {"date_from_parsed": date_from_parsed, "date_to_parsed": date_to_parsed}
+
+
+async def filter_transactions_by_date_range(query: dict, date_from: Optional[str], date_to: Optional[str]):
+    """Filter transactions by date range"""
+    transactions = await db.transactions.find(query, {"_id": 0}).to_list(50000)
+    
+    if not date_from and not date_to:
+        return transactions
+    
+    def parse_date(d):
+        try:
+            parts = d.split('-')
+            return (int(parts[2]), int(parts[1]), int(parts[0]))  # (year, month, day)
+        except:
+            return None
+    
+    date_from_parsed = parse_date(date_from) if date_from else None
+    date_to_parsed = parse_date(date_to) if date_to else None
+    
+    filtered = []
+    for t in transactions:
+        t_date = parse_date(t.get('data_date', ''))
+        if t_date is None:
+            continue
+        
+        if date_from_parsed and t_date < date_from_parsed:
+            continue
+        if date_to_parsed and t_date > date_to_parsed:
+            continue
+        
+        filtered.append(t)
+    
+    return filtered
 
 
 @api_router.get("/report/summary")
-async def get_report_summary(report_id: Optional[str] = None, date_filter: Optional[str] = None):
-    """Get summary of ATM REPAY report with optional date filter"""
+async def get_report_summary(
+    report_id: Optional[str] = None, 
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    """Get summary of ATM REPAY report with optional date range filter"""
     
     query = {}
     if report_id:
         query["report_id"] = report_id
-    if date_filter:
-        query["data_date"] = date_filter
     
-    # Get transactions based on query
-    transactions = await db.transactions.find(query, {"_id": 0}).to_list(10000)
+    # Get transactions with date range filter
+    transactions = await filter_transactions_by_date_range(query, date_from, date_to)
     
     if transactions:
         # Get report info if specific report
@@ -457,8 +519,13 @@ async def get_report_summary(report_id: Optional[str] = None, date_filter: Optio
             if report:
                 period = report.get('period', 'Unknown')
                 bank_code = report.get('bank_code', '008 - MDR')
-        elif date_filter:
-            period = f"Tanggal: {date_filter}"
+        elif date_from or date_to:
+            if date_from and date_to:
+                period = f"Tanggal: {date_from} s/d {date_to}"
+            elif date_from:
+                period = f"Dari: {date_from}"
+            elif date_to:
+                period = f"Sampai: {date_to}"
         
         return calculate_summary(transactions, period=period, bank_code=bank_code, report_id=report_id)
     
@@ -483,11 +550,13 @@ async def get_report_summary(report_id: Optional[str] = None, date_filter: Optio
 
 
 @api_router.get("/report/summary-by-bank")
-async def get_summary_by_bank(date_filter: Optional[str] = None):
-    """Get transaction summary grouped by bank"""
+async def get_summary_by_bank(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    """Get transaction summary grouped by bank with date range filter"""
     
-    query = {}
-    if date_filter:
+    transactions = await filter_transactions_by_date_range({}, date_from, date_to)
         query["data_date"] = date_filter
     
     transactions = await db.transactions.find(query, {"_id": 0}).to_list(10000)
