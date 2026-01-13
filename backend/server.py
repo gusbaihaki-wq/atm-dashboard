@@ -367,6 +367,54 @@ async def get_report_summary(report_id: Optional[str] = None):
     return calculate_summary(INITIAL_REPORT_DATA, period="Desember 2025", bank_code="008 - MDR")
 
 
+def expand_transactions(summary_data: list, data_date: str = None) -> list:
+    """Expand summary transactions into individual transaction rows"""
+    expanded = []
+    
+    for item in summary_data:
+        terminal_id = item.get('terminal_id', '')
+        terminal_location = item.get('terminal_location', '')
+        date = data_date or item.get('data_date', '-')
+        
+        # Add sukses transactions
+        for i in range(item.get('sukses', 0)):
+            expanded.append({
+                "terminal_id": terminal_id,
+                "terminal_location": terminal_location,
+                "status": "Sukses",
+                "data_date": date
+            })
+        
+        # Add gagal sistem bank transactions
+        for i in range(item.get('gagal_sistem_bank', 0)):
+            expanded.append({
+                "terminal_id": terminal_id,
+                "terminal_location": terminal_location,
+                "status": "Gagal Sistem Bank",
+                "data_date": date
+            })
+        
+        # Add gagal nasabah transactions
+        for i in range(item.get('gagal_nasabah', 0)):
+            expanded.append({
+                "terminal_id": terminal_id,
+                "terminal_location": terminal_location,
+                "status": "Gagal Nasabah",
+                "data_date": date
+            })
+        
+        # Add gagal sistem jalin transactions
+        for i in range(item.get('gagal_sistem_jalin', 0)):
+            expanded.append({
+                "terminal_id": terminal_id,
+                "terminal_location": terminal_location,
+                "status": "Gagal Sistem Jalin",
+                "data_date": date
+            })
+    
+    return expanded
+
+
 @api_router.get("/report/transactions")
 async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, limit: int = 50, search: str = "", sort_by: str = "terminal_id", sort_order: str = "asc"):
     """Get all ATM transaction data with pagination, sorted by terminal_id"""
@@ -435,6 +483,147 @@ async def get_all_transactions(report_id: Optional[str] = None, page: int = 1, l
         "limit": limit,
         "pages": (total + limit - 1) // limit
     }
+
+
+@api_router.get("/report/transactions-detail")
+async def get_transactions_detail(report_id: Optional[str] = None, page: int = 1, limit: int = 100, search: str = "", status_filter: str = ""):
+    """Get individual transaction details (expanded from summary)"""
+    
+    skip = (page - 1) * limit
+    data_date = "-"
+    
+    if report_id:
+        # Get report info for date
+        report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+        if report:
+            data_date = report.get('data_date', '-')
+        
+        query = {"report_id": report_id}
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        
+        if transactions:
+            expanded = expand_transactions(transactions, data_date)
+            
+            # Apply search filter
+            if search:
+                expanded = [t for t in expanded if search.lower() in t['terminal_id'].lower() or search.lower() in t['terminal_location'].lower()]
+            
+            # Apply status filter
+            if status_filter:
+                expanded = [t for t in expanded if t['status'] == status_filter]
+            
+            total = len(expanded)
+            paginated = expanded[skip:skip+limit]
+            
+            return {
+                "data": paginated,
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit
+            }
+    
+    # Check for latest report
+    latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
+    
+    if latest_report:
+        data_date = latest_report.get('data_date', '-')
+        query = {"report_id": latest_report['id']}
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        
+        if transactions:
+            expanded = expand_transactions(transactions, data_date)
+            
+            if search:
+                expanded = [t for t in expanded if search.lower() in t['terminal_id'].lower() or search.lower() in t['terminal_location'].lower()]
+            
+            if status_filter:
+                expanded = [t for t in expanded if t['status'] == status_filter]
+            
+            total = len(expanded)
+            paginated = expanded[skip:skip+limit]
+            
+            return {
+                "data": paginated,
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit
+            }
+    
+    # Return initial data expanded
+    expanded = expand_transactions(INITIAL_REPORT_DATA, "25-12-2025")
+    
+    if search:
+        expanded = [t for t in expanded if search.lower() in t['terminal_id'].lower() or search.lower() in t['terminal_location'].lower()]
+    
+    if status_filter:
+        expanded = [t for t in expanded if t['status'] == status_filter]
+    
+    total = len(expanded)
+    paginated = expanded[skip:skip+limit]
+    
+    return {
+        "data": paginated,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit
+    }
+
+
+@api_router.get("/report/transactions-detail/export")
+async def export_transactions_detail(report_id: Optional[str] = None, search: str = "", status_filter: str = ""):
+    """Export all individual transaction details"""
+    
+    data_date = "-"
+    
+    if report_id:
+        report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+        if report:
+            data_date = report.get('data_date', '-')
+        
+        query = {"report_id": report_id}
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        
+        if transactions:
+            expanded = expand_transactions(transactions, data_date)
+            
+            if search:
+                expanded = [t for t in expanded if search.lower() in t['terminal_id'].lower() or search.lower() in t['terminal_location'].lower()]
+            
+            if status_filter:
+                expanded = [t for t in expanded if t['status'] == status_filter]
+            
+            return {"data": expanded}
+    
+    latest_report = await db.reports.find_one({}, {"_id": 0}, sort=[("upload_date", -1)])
+    
+    if latest_report:
+        data_date = latest_report.get('data_date', '-')
+        query = {"report_id": latest_report['id']}
+        transactions = await db.transactions.find(query, {"_id": 0}).sort("terminal_id", 1).to_list(10000)
+        
+        if transactions:
+            expanded = expand_transactions(transactions, data_date)
+            
+            if search:
+                expanded = [t for t in expanded if search.lower() in t['terminal_id'].lower() or search.lower() in t['terminal_location'].lower()]
+            
+            if status_filter:
+                expanded = [t for t in expanded if t['status'] == status_filter]
+            
+            return {"data": expanded}
+    
+    expanded = expand_transactions(INITIAL_REPORT_DATA, "25-12-2025")
+    
+    if search:
+        expanded = [t for t in expanded if search.lower() in t['terminal_id'].lower() or search.lower() in t['terminal_location'].lower()]
+    
+    if status_filter:
+        expanded = [t for t in expanded if t['status'] == status_filter]
+    
+    return {"data": expanded}
 
 
 @api_router.get("/report/transactions/export")
