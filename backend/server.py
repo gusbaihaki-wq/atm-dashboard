@@ -953,6 +953,201 @@ async def get_transaction_by_terminal(terminal_id: str):
     raise HTTPException(status_code=404, detail="Terminal not found")
 
 
+# ==================== ATM ACTIVATION ENDPOINTS ====================
+
+@api_router.get("/atm-activation")
+async def get_atm_activations(page: int = 1, limit: int = 50, search: str = ""):
+    """Get all ATM activation data with pagination"""
+    skip = (page - 1) * limit
+    
+    query = {}
+    if search:
+        query["$or"] = [
+            {"terminal_id_baru": {"$regex": search, "$options": "i"}},
+            {"terminal_id_sebelumnya": {"$regex": search, "$options": "i"}},
+            {"lokasi": {"$regex": search, "$options": "i"}},
+            {"lokasi_sebelumnya": {"$regex": search, "$options": "i"}},
+            {"bank": {"$regex": search, "$options": "i"}},
+            {"mitra_penyedia": {"$regex": search, "$options": "i"}}
+        ]
+    
+    total = await db.atm_activations.count_documents(query)
+    activations = await db.atm_activations.find(query, {"_id": 0}).sort("no", 1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        "data": activations,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit if total > 0 else 1
+    }
+
+
+@api_router.get("/atm-activation/export")
+async def export_atm_activations(search: str = ""):
+    """Export all ATM activation data"""
+    query = {}
+    if search:
+        query["$or"] = [
+            {"terminal_id_baru": {"$regex": search, "$options": "i"}},
+            {"terminal_id_sebelumnya": {"$regex": search, "$options": "i"}},
+            {"lokasi": {"$regex": search, "$options": "i"}},
+            {"bank": {"$regex": search, "$options": "i"}}
+        ]
+    
+    activations = await db.atm_activations.find(query, {"_id": 0}).sort("no", 1).to_list(10000)
+    return {"data": activations}
+
+
+@api_router.get("/atm-activation/next-no")
+async def get_next_activation_no():
+    """Get next series number for ATM activation"""
+    last_record = await db.atm_activations.find_one({}, {"_id": 0, "no": 1}, sort=[("no", -1)])
+    next_no = (last_record.get("no", 0) + 1) if last_record else 1
+    return {"next_no": next_no}
+
+
+@api_router.post("/atm-activation")
+async def create_atm_activation(data: ATMActivationCreate):
+    """Create a new ATM activation record"""
+    # Get next series number
+    last_record = await db.atm_activations.find_one({}, {"_id": 0, "no": 1}, sort=[("no", -1)])
+    next_no = (last_record.get("no", 0) + 1) if last_record else 1
+    
+    # Get bank from terminal ID
+    bank = get_bank_name(data.terminal_id_baru)
+    
+    activation = {
+        "id": str(uuid.uuid4()),
+        "no": next_no,
+        "bank": bank,
+        "terminal_id_sebelumnya": data.terminal_id_sebelumnya or "",
+        "lokasi_sebelumnya": data.lokasi_sebelumnya or "",
+        "terminal_id_baru": data.terminal_id_baru,
+        "lokasi": data.lokasi,
+        "tanggal_aktivasi": data.tanggal_aktivasi,
+        "tanggal_terminated": data.tanggal_terminated or "",
+        "mitra_penyedia": data.mitra_penyedia or "",
+        "mitra_rpl": data.mitra_rpl or "",
+        "mitra_slm": data.mitra_slm or "",
+        "mitra_jarkom": data.mitra_jarkom or "",
+        "mitra_cctv": data.mitra_cctv or "",
+        "mitra_ups": data.mitra_ups or "",
+        "mitra_premises": data.mitra_premises or ""
+    }
+    
+    await db.atm_activations.insert_one(activation)
+    return {"success": True, "data": activation}
+
+
+@api_router.put("/atm-activation/{activation_id}")
+async def update_atm_activation(activation_id: str, data: ATMActivationUpdate):
+    """Update an ATM activation record"""
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    # Update bank if terminal_id_baru changed
+    if "terminal_id_baru" in update_data:
+        update_data["bank"] = get_bank_name(update_data["terminal_id_baru"])
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+    
+    result = await db.atm_activations.update_one(
+        {"id": activation_id},
+        {"$set": update_data}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Activation record not found")
+    
+    updated = await db.atm_activations.find_one({"id": activation_id}, {"_id": 0})
+    return {"success": True, "data": updated}
+
+
+@api_router.delete("/atm-activation/{activation_id}")
+async def delete_atm_activation(activation_id: str):
+    """Delete an ATM activation record"""
+    result = await db.atm_activations.delete_one({"id": activation_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Activation record not found")
+    
+    return {"success": True, "message": "Record deleted successfully"}
+
+
+@api_router.post("/atm-activation/upload")
+async def upload_atm_activations(file: UploadFile = File(...)):
+    """Upload ATM activation data from file"""
+    content = await file.read()
+    
+    try:
+        text_content = content.decode('utf-8')
+    except:
+        try:
+            text_content = content.decode('latin-1')
+        except:
+            raise HTTPException(status_code=400, detail="Unable to read file encoding")
+    
+    # Get current max series number
+    last_record = await db.atm_activations.find_one({}, {"_id": 0, "no": 1}, sort=[("no", -1)])
+    current_no = (last_record.get("no", 0)) if last_record else 0
+    
+    # Parse CSV/TXT file
+    lines = text_content.strip().split('\n')
+    activations = []
+    
+    # Skip header if exists
+    start_idx = 0
+    if lines and ('terminal' in lines[0].lower() or 'lokasi' in lines[0].lower() or 'no' in lines[0].lower()):
+        start_idx = 1
+    
+    for line in lines[start_idx:]:
+        if not line.strip():
+            continue
+        
+        # Try to parse as CSV (comma or tab separated)
+        parts = line.split('\t') if '\t' in line else line.split(',')
+        
+        if len(parts) >= 4:  # Minimum: TID sebelumnya, Lokasi sebelumnya, TID baru, Lokasi baru
+            current_no += 1
+            
+            # Clean parts
+            parts = [p.strip().strip('"').strip("'") for p in parts]
+            
+            activation = {
+                "id": str(uuid.uuid4()),
+                "no": current_no,
+                "terminal_id_sebelumnya": parts[0] if len(parts) > 0 else "",
+                "lokasi_sebelumnya": parts[1] if len(parts) > 1 else "",
+                "terminal_id_baru": parts[2] if len(parts) > 2 else "",
+                "lokasi": parts[3] if len(parts) > 3 else "",
+                "tanggal_aktivasi": parts[4] if len(parts) > 4 else "",
+                "tanggal_terminated": parts[5] if len(parts) > 5 else "",
+                "mitra_penyedia": parts[6] if len(parts) > 6 else "",
+                "mitra_rpl": parts[7] if len(parts) > 7 else "",
+                "mitra_slm": parts[8] if len(parts) > 8 else "",
+                "mitra_jarkom": parts[9] if len(parts) > 9 else "",
+                "mitra_cctv": parts[10] if len(parts) > 10 else "",
+                "mitra_ups": parts[11] if len(parts) > 11 else "",
+                "mitra_premises": parts[12] if len(parts) > 12 else ""
+            }
+            
+            # Get bank from new terminal ID
+            activation["bank"] = get_bank_name(activation["terminal_id_baru"])
+            
+            activations.append(activation)
+    
+    if activations:
+        await db.atm_activations.insert_many(activations)
+    
+    return {
+        "success": True,
+        "message": f"Successfully uploaded {len(activations)} records",
+        "total_uploaded": len(activations),
+        "last_no": current_no
+    }
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
