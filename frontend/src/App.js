@@ -762,6 +762,13 @@ const Calculator = () => {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Jumlah Transaksi per Bulan</label>
+                <div className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-semibold">
+                  {(transaksiPerHari * 30).toLocaleString('id-ID')}
+                  <span className="text-xs text-gray-500 ml-2">(per hari × 30)</span>
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Harga Layanan (Rp)</label>
                 <input
                   type="number"
