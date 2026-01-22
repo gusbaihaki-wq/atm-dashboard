@@ -867,6 +867,10 @@ const Calculator = () => {
                 <span className="font-semibold">{transaksiPerHari.toLocaleString('id-ID')}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-600">
+                <span className="text-gray-300">Transaksi per Bulan:</span>
+                <span className="font-semibold">{(transaksiPerHari * 30).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-600">
                 <span className="text-gray-300">SP Aktif:</span>
                 <span className="font-semibold">{totalActiveSPPercentage.toFixed(2)}%</span>
               </div>
@@ -877,7 +881,7 @@ const Calculator = () => {
             </div>
 
             <div className="bg-blue-600 rounded-lg p-4 mb-4">
-              <div className="text-blue-100 text-sm mb-1">Revenue</div>
+              <div className="text-blue-100 text-sm mb-1">Revenue (per Hari)</div>
               <div className="text-sm text-blue-200 mb-2">
                 = {transaksiPerHari.toLocaleString('id-ID')} × {totalActiveSPPercentage.toFixed(2)}% × Rp {hargaLayanan.toLocaleString('id-ID')}
               </div>
@@ -891,7 +895,7 @@ const Calculator = () => {
 
             <div className={`rounded-lg p-4 ${isProfit ? 'bg-green-600' : 'bg-red-700'}`}>
               <div className={`text-sm mb-1 ${isProfit ? 'text-green-100' : 'text-red-100'}`}>
-                {isProfit ? '✅ UNTUNG' : '❌ RUGI'}
+                {isProfit ? '✅ UNTUNG' : '❌ RUGI'} (per Hari)
               </div>
               <div className="text-sm mb-2 opacity-80">
                 = Revenue - Cost = Rp {revenue.toLocaleString('id-ID', { maximumFractionDigits: 0 })} - Rp {totalCost.toLocaleString('id-ID')}
