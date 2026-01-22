@@ -836,18 +836,18 @@ const Calculator = () => {
         <div className="space-y-6">
           {/* Driver Cost */}
           <div className="bg-white rounded-xl shadow-lg p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">💰 Driver Cost</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">💰 Driver Cost (per Bulan)</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                { key: 'slm', label: 'SLM' },
-                { key: 'sewaMesin', label: 'Sewa Mesin' },
-                { key: 'itPlatform', label: 'IT Platform' },
-                { key: 'sewaLokasi', label: 'Sewa Lokasi' },
-                { key: 'listrik', label: 'Listrik' },
-                { key: 'cctv', label: 'CCTV' },
-                { key: 'spaceRepair', label: 'Space Repair' },
-                { key: 'cleaning', label: 'Cleaning' },
-                { key: 'network', label: 'Network' },
+                { key: 'slm', label: 'SP 1 - SLM' },
+                { key: 'sewaMesin', label: 'SP 2 - Sewa Mesin' },
+                { key: 'itPlatform', label: 'SP 3 - IT Platform' },
+                { key: 'sewaLokasi', label: 'SP 4.a - Sewa Lokasi' },
+                { key: 'listrik', label: 'SP 4.b - Listrik' },
+                { key: 'cctv', label: 'SP 4.c - Security/CCTV' },
+                { key: 'spaceRepair', label: 'SP 4.d - Space Repair' },
+                { key: 'cleaning', label: 'SP 4.e - Cleaning' },
+                { key: 'network', label: 'SP 5 - Network' },
               ].map(({ key, label }) => (
                 <div key={key}>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
@@ -860,16 +860,40 @@ const Calculator = () => {
                   />
                 </div>
               ))}
+              {/* OTC Network */}
+              <div className="sm:col-span-2 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                <label className="block text-xs font-medium text-yellow-800 mb-1">SP 5 - OTC Network (One Time Charge / Tahun)</label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    value={otcNetwork}
+                    onChange={(e) => setOtcNetwork(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-yellow-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500"
+                    placeholder="500000"
+                  />
+                  <span className="text-xs text-yellow-700 whitespace-nowrap">÷ 12 = Rp {Math.round(otcNetwork / 12).toLocaleString('id-ID')}/bln</span>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-              <span className="font-medium text-gray-700">Total Cost:</span>
-              <span className="text-xl font-bold text-red-600">Rp {totalCost.toLocaleString('id-ID')}</span>
+            <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">Biaya Reguler:</span>
+                <span className="font-medium">Rp {regularCost.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">OTC (per bulan):</span>
+                <span className="font-medium">Rp {Math.round(otcPerBulan).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="font-medium text-gray-700">Total Cost:</span>
+                <span className="text-xl font-bold text-red-600">Rp {Math.round(totalCost).toLocaleString('id-ID')}</span>
+              </div>
             </div>
           </div>
 
           {/* Result */}
           <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-lg p-6 text-white">
-            <h3 className="text-lg font-bold mb-4">📈 Hasil Perhitungan</h3>
+            <h3 className="text-lg font-bold mb-4">📈 Hasil Perhitungan (per Bulan)</h3>
             
             <div className="space-y-3 mb-6">
               <div className="flex justify-between items-center py-2 border-b border-gray-600">
