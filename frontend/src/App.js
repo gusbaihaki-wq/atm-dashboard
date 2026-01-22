@@ -692,26 +692,35 @@ const Calculator = () => {
     itPlatform: '',
     sewaLokasi: '',
     listrik: '',
-    cctv: '',
-    spaceRepair: '',
-    cleaning: '',
-    network: ''
+    slm: 700000,
+    sewaMesin: 2500000,
+    itPlatform: 500000,
+    sewaLokasi: 2050000,
+    listrik: 700000,
+    cctv: 300000,
+    spaceRepair: 100000,
+    cleaning: 300000,
+    network: 550000
   });
+  const [otcNetwork, setOtcNetwork] = useState(500000);
 
   // Calculate active SP percentage
   const totalActiveSPPercentage = spData
     .filter(sp => activeSP[sp.id])
     .reduce((sum, sp) => sum + sp.proporsi, 0);
 
-  // Calculate Revenue
-  const revenue = transaksiPerHari * (totalActiveSPPercentage / 100) * hargaLayanan;
+  // Calculate Revenue per bulan (transaksi per hari x 30 x SP% x harga)
+  const revenuePerHari = transaksiPerHari * (totalActiveSPPercentage / 100) * hargaLayanan;
+  const revenuePerBulan = revenuePerHari * 30;
 
-  // Calculate Total Cost
-  const totalCost = Object.values(driverCost)
+  // Calculate Total Cost (including OTC divided by 12)
+  const regularCost = Object.values(driverCost)
     .reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+  const otcPerBulan = (parseFloat(otcNetwork) || 0) / 12;
+  const totalCost = regularCost + otcPerBulan;
 
-  // Calculate Profit/Loss
-  const profitLoss = revenue - totalCost;
+  // Calculate Profit/Loss (per bulan)
+  const profitLoss = revenuePerBulan - totalCost;
   const isProfit = profitLoss >= 0;
 
   const handleSPToggle = (spId) => {
