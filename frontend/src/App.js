@@ -915,27 +915,30 @@ const Calculator = () => {
             </div>
 
             <div className="bg-blue-600 rounded-lg p-4 mb-4">
-              <div className="text-blue-100 text-sm mb-1">Revenue (per Hari)</div>
+              <div className="text-blue-100 text-sm mb-1">Revenue per Bulan</div>
               <div className="text-sm text-blue-200 mb-2">
-                = {transaksiPerHari.toLocaleString('id-ID')} × {totalActiveSPPercentage.toFixed(2)}% × Rp {hargaLayanan.toLocaleString('id-ID')}
+                = {transaksiPerHari.toLocaleString('id-ID')} × 30 hari × {totalActiveSPPercentage.toFixed(2)}% × Rp {hargaLayanan.toLocaleString('id-ID')}
               </div>
-              <div className="text-2xl font-bold">Rp {revenue.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+              <div className="text-2xl font-bold">Rp {Math.round(revenuePerBulan).toLocaleString('id-ID')}</div>
             </div>
 
-            <div className="bg-red-600 rounded-lg p-4 mb-4">
-              <div className="text-red-100 text-sm mb-1">Total Cost</div>
-              <div className="text-2xl font-bold">Rp {totalCost.toLocaleString('id-ID')}</div>
+            <div className="bg-gray-600 rounded-lg p-4 mb-4">
+              <div className="text-gray-100 text-sm mb-1">Total Cost per Bulan</div>
+              <div className="text-sm text-gray-300 mb-2">
+                = Biaya Reguler + (OTC ÷ 12)
+              </div>
+              <div className="text-2xl font-bold">Rp {Math.round(totalCost).toLocaleString('id-ID')}</div>
             </div>
 
-            <div className={`rounded-lg p-4 ${isProfit ? 'bg-green-600' : 'bg-red-700'}`}>
+            <div className={`rounded-lg p-4 ${isProfit ? 'bg-green-600' : 'bg-red-600'}`}>
               <div className={`text-sm mb-1 ${isProfit ? 'text-green-100' : 'text-red-100'}`}>
-                {isProfit ? '✅ UNTUNG' : '❌ RUGI'} (per Hari)
+                {isProfit ? '✅ UNTUNG' : '❌ RUGI'} (per Bulan)
               </div>
               <div className="text-sm mb-2 opacity-80">
-                = Revenue - Cost = Rp {revenue.toLocaleString('id-ID', { maximumFractionDigits: 0 })} - Rp {totalCost.toLocaleString('id-ID')}
+                = Revenue - Cost = Rp {Math.round(revenuePerBulan).toLocaleString('id-ID')} - Rp {Math.round(totalCost).toLocaleString('id-ID')}
               </div>
               <div className="text-3xl font-bold">
-                {isProfit ? '+' : '-'} Rp {Math.abs(profitLoss).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {isProfit ? '+' : '-'} Rp {Math.abs(Math.round(profitLoss)).toLocaleString('id-ID')}
               </div>
             </div>
           </div>
