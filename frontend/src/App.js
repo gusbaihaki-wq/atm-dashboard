@@ -920,11 +920,14 @@ function App() {
 
       <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="bg-white rounded-xl shadow-md p-2 inline-flex gap-1 flex-wrap">
-          {['overview', 'detail', 'terminal', 'top', 'bottom', 'upload', 'aktivasi'].map((tab) => (
+          {['overview', 'detail', 'terminal', 'top', 'bottom', 'upload', 'aktivasi', 'kalkulator'].map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`px-4 py-3 rounded-lg font-medium transition-all ${
                 activeTab === tab 
-                  ? tab === 'aktivasi' ? 'bg-teal-600 text-white shadow' : tab === 'upload' ? 'bg-green-600 text-white shadow' : 'bg-blue-600 text-white shadow'
+                  ? tab === 'aktivasi' ? 'bg-teal-600 text-white shadow' 
+                  : tab === 'upload' ? 'bg-green-600 text-white shadow' 
+                  : tab === 'kalkulator' ? 'bg-orange-600 text-white shadow'
+                  : 'bg-blue-600 text-white shadow'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}>
               {tab === 'overview' && '📈 Overview'}
@@ -934,13 +937,14 @@ function App() {
               {tab === 'bottom' && '📉 Bottom'}
               {tab === 'upload' && '📤 Upload'}
               {tab === 'aktivasi' && '🆕 ATM Aktivasi'}
+              {tab === 'kalkulator' && '🧮 Kalkulator'}
             </button>
           ))}
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {!['upload', 'aktivasi'].includes(activeTab) && (
+        {!['upload', 'aktivasi', 'kalkulator'].includes(activeTab) && (
           <ReportSelector reports={reports} selectedReport={selectedReport} onSelectReport={setSelectedReport} />
         )}
 
