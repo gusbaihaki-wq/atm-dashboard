@@ -1538,6 +1538,8 @@ function App() {
         )}
 
         {activeTab === 'aktivasi' && <ATMActivationTab />}
+
+        {activeTab === 'kalkulator' && <Calculator />}
       </main>
 
       <footer className="bg-white border-t mt-12">
