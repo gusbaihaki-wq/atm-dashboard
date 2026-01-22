@@ -664,6 +664,243 @@ const ATMActivationTab = () => {
   );
 };
 
+
+// Calculator Component
+const Calculator = () => {
+  // SP Data from the image
+  const spData = [
+    { id: 'sp1', name: 'SLM', jenisSP: 'SP 1', proporsi: 9.24 },
+    { id: 'sp2', name: 'ATM/Delivery Channel Depre/Rental', jenisSP: 'SP 2', proporsi: 31.25 },
+    { id: 'sp3', name: 'e-Channel Platform (IT Cost)', jenisSP: 'SP 3', proporsi: 11.12 },
+    { id: 'sp4a', name: 'Sewa Lokasi', jenisSP: 'SP 4.a', proporsi: 22.30 },
+    { id: 'sp4b', name: 'Listrik', jenisSP: 'SP 4.b', proporsi: 6.40 },
+    { id: 'sp4c', name: 'Security', jenisSP: 'SP 4.c', proporsi: 3.60 },
+    { id: 'sp4d', name: 'Renovation/Space Repair', jenisSP: 'SP 4.d', proporsi: 1.65 },
+    { id: 'sp4e', name: 'Cleaning', jenisSP: 'SP 4.e', proporsi: 4.08 },
+    { id: 'sp5', name: 'Network', jenisSP: 'SP 5', proporsi: 10.36 },
+  ];
+
+  const [transaksiPerHari, setTransaksiPerHari] = useState(100);
+  const [hargaLayanan, setHargaLayanan] = useState(1735);
+  const [activeSP, setActiveSP] = useState({
+    sp1: true, sp2: true, sp3: true, sp4a: true, sp4b: true, 
+    sp4c: true, sp4d: true, sp4e: true, sp5: true
+  });
+  const [driverCost, setDriverCost] = useState({
+    slm: '',
+    sewaMesin: '',
+    itPlatform: '',
+    sewaLokasi: '',
+    listrik: '',
+    cctv: '',
+    spaceRepair: '',
+    cleaning: '',
+    network: ''
+  });
+
+  // Calculate active SP percentage
+  const totalActiveSPPercentage = spData
+    .filter(sp => activeSP[sp.id])
+    .reduce((sum, sp) => sum + sp.proporsi, 0);
+
+  // Calculate Revenue
+  const revenue = transaksiPerHari * (totalActiveSPPercentage / 100) * hargaLayanan;
+
+  // Calculate Total Cost
+  const totalCost = Object.values(driverCost)
+    .reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+
+  // Calculate Profit/Loss
+  const profitLoss = revenue - totalCost;
+  const isProfit = profitLoss >= 0;
+
+  const handleSPToggle = (spId) => {
+    setActiveSP(prev => ({ ...prev, [spId]: !prev[spId] }));
+  };
+
+  const handleCostChange = (field, value) => {
+    setDriverCost(prev => ({ ...prev, [field]: value }));
+  };
+
+  const resetCalculator = () => {
+    setTransaksiPerHari(100);
+    setHargaLayanan(1735);
+    setActiveSP({
+      sp1: true, sp2: true, sp3: true, sp4a: true, sp4b: true,
+      sp4c: true, sp4d: true, sp4e: true, sp5: true
+    });
+    setDriverCost({
+      slm: '', sewaMesin: '', itPlatform: '', sewaLokasi: '',
+      listrik: '', cctv: '', spaceRepair: '', cleaning: '', network: ''
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-800">🧮 Kalkulator Analisa Transaksi</h2>
+        <button onClick={resetCalculator} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+          🔄 Reset
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Input Section */}
+        <div className="space-y-6">
+          {/* Basic Inputs */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">📊 Input Parameter</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Jumlah Transaksi per Hari</label>
+                <input
+                  type="number"
+                  value={transaksiPerHari}
+                  onChange={(e) => setTransaksiPerHari(parseFloat(e.target.value) || 0)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Harga Layanan (Rp)</label>
+                <input
+                  type="number"
+                  value={hargaLayanan}
+                  onChange={(e) => setHargaLayanan(parseFloat(e.target.value) || 0)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="1735"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SP Aktif */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">✅ SP yang Aktif</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="py-2 px-3 text-left">Aktif</th>
+                    <th className="py-2 px-3 text-left">Jenis Layanan</th>
+                    <th className="py-2 px-3 text-center">Jenis SP</th>
+                    <th className="py-2 px-3 text-right">Proporsi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {spData.map((sp) => (
+                    <tr key={sp.id} className={`border-b ${activeSP[sp.id] ? 'bg-green-50' : 'bg-gray-50 opacity-60'}`}>
+                      <td className="py-2 px-3">
+                        <input
+                          type="checkbox"
+                          checked={activeSP[sp.id]}
+                          onChange={() => handleSPToggle(sp.id)}
+                          className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                        />
+                      </td>
+                      <td className="py-2 px-3">{sp.name}</td>
+                      <td className="py-2 px-3 text-center font-medium text-blue-600">{sp.jenisSP}</td>
+                      <td className="py-2 px-3 text-right font-semibold">{sp.proporsi.toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-orange-100 font-bold">
+                  <tr>
+                    <td colSpan="3" className="py-2 px-3 text-right">Total SP Aktif:</td>
+                    <td className="py-2 px-3 text-right text-orange-700">{totalActiveSPPercentage.toFixed(2)}%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Cost & Result Section */}
+        <div className="space-y-6">
+          {/* Driver Cost */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">💰 Driver Cost</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { key: 'slm', label: 'SLM' },
+                { key: 'sewaMesin', label: 'Sewa Mesin' },
+                { key: 'itPlatform', label: 'IT Platform' },
+                { key: 'sewaLokasi', label: 'Sewa Lokasi' },
+                { key: 'listrik', label: 'Listrik' },
+                { key: 'cctv', label: 'CCTV' },
+                { key: 'spaceRepair', label: 'Space Repair' },
+                { key: 'cleaning', label: 'Cleaning' },
+                { key: 'network', label: 'Network' },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                  <input
+                    type="number"
+                    value={driverCost[key]}
+                    onChange={(e) => handleCostChange(key, e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
+                    placeholder="0"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+              <span className="font-medium text-gray-700">Total Cost:</span>
+              <span className="text-xl font-bold text-red-600">Rp {totalCost.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+
+          {/* Result */}
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-lg p-6 text-white">
+            <h3 className="text-lg font-bold mb-4">📈 Hasil Perhitungan</h3>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between items-center py-2 border-b border-gray-600">
+                <span className="text-gray-300">Transaksi per Hari:</span>
+                <span className="font-semibold">{transaksiPerHari.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-600">
+                <span className="text-gray-300">SP Aktif:</span>
+                <span className="font-semibold">{totalActiveSPPercentage.toFixed(2)}%</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-600">
+                <span className="text-gray-300">Harga Layanan:</span>
+                <span className="font-semibold">Rp {hargaLayanan.toLocaleString('id-ID')}</span>
+              </div>
+            </div>
+
+            <div className="bg-blue-600 rounded-lg p-4 mb-4">
+              <div className="text-blue-100 text-sm mb-1">Revenue</div>
+              <div className="text-sm text-blue-200 mb-2">
+                = {transaksiPerHari.toLocaleString('id-ID')} × {totalActiveSPPercentage.toFixed(2)}% × Rp {hargaLayanan.toLocaleString('id-ID')}
+              </div>
+              <div className="text-2xl font-bold">Rp {revenue.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+            </div>
+
+            <div className="bg-red-600 rounded-lg p-4 mb-4">
+              <div className="text-red-100 text-sm mb-1">Total Cost</div>
+              <div className="text-2xl font-bold">Rp {totalCost.toLocaleString('id-ID')}</div>
+            </div>
+
+            <div className={`rounded-lg p-4 ${isProfit ? 'bg-green-600' : 'bg-red-700'}`}>
+              <div className={`text-sm mb-1 ${isProfit ? 'text-green-100' : 'text-red-100'}`}>
+                {isProfit ? '✅ UNTUNG' : '❌ RUGI'}
+              </div>
+              <div className="text-sm mb-2 opacity-80">
+                = Revenue - Cost = Rp {revenue.toLocaleString('id-ID', { maximumFractionDigits: 0 })} - Rp {totalCost.toLocaleString('id-ID')}
+              </div>
+              <div className="text-3xl font-bold">
+                {isProfit ? '+' : '-'} Rp {Math.abs(profitLoss).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 // Report Selector Component
 const ReportSelector = ({ reports, selectedReport, onSelectReport }) => {
   if (!reports || reports.length === 0) return null;
