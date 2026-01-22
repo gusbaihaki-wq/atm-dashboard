@@ -739,9 +739,10 @@ const Calculator = () => {
       sp4c: true, sp4d: true, sp4e: true, sp5: true
     });
     setDriverCost({
-      slm: '', sewaMesin: '', itPlatform: '', sewaLokasi: '',
-      listrik: '', cctv: '', spaceRepair: '', cleaning: '', network: ''
+      slm: 700000, sewaMesin: 2500000, itPlatform: 500000, sewaLokasi: 2050000,
+      listrik: 700000, cctv: 300000, spaceRepair: 100000, cleaning: 300000, network: 550000
     });
+    setOtcNetwork(500000);
   };
 
   return (
