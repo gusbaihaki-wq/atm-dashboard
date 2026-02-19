@@ -163,68 +163,99 @@ def parse_float(value: str) -> float:
 
 def parse_report_file(content: str) -> tuple:
     """Parse report file content and extract transactions"""
-    lines = content.split('\n')
+    # Strip BOM and normalize line endings
+    content = content.lstrip('\ufeff')
+    lines = content.splitlines()
     transactions = []
     period = "Unknown"
     bank_code = "Unknown"
-    
+
     # Try to extract period and bank code from header
     for line in lines[:20]:
-        if 'Desember' in line or 'Januari' in line or 'Februari' in line or 'Maret' in line or \
-           'April' in line or 'Mei' in line or 'Juni' in line or 'Juli' in line or \
-           'Agustus' in line or 'September' in line or 'Oktober' in line or 'November' in line:
-            # Extract month and year
+        if any(m in line for m in ['Desember', 'Januari', 'Februari', 'Maret', 'April', 'Mei',
+                                    'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November']):
             match = re.search(r'(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s*(\d{4})', line)
             if match:
                 period = f"{match.group(1)} {match.group(2)}"
         if '008' in line and 'MDR' in line:
             bank_code = "008 - MDR"
-    
-    # Parse transaction data - look for lines with ATM data
-    current_no = 0
+
+    # Parse transaction data
+    # Format: No | Channel | Terminal ID | Location | Sukses | Gagal Bank | Gagal Nasabah | Gagal Jalin | Total | Biaya | Proporsi | Repay
     for line in lines:
-        # Skip empty lines and headers
         if not line.strip():
             continue
-        
-        # Try to parse as transaction line
-        # Format: No | Channel | Terminal ID | Location | Sukses | Gagal Bank | Gagal Nasabah | Gagal Jalin | Total | Biaya | Proporsi | Repay
+
+        # Try delimiters: tab, then 2+ spaces or pipe, then comma
         parts = line.split('\t')
-        if len(parts) < 10:
+        if len(parts) < 5:
             parts = re.split(r'\s{2,}|\|', line)
-        
-        if len(parts) >= 10:
-            try:
-                # Check if first part is a number (row number)
-                no = int(parts[0].strip())
-                if no > 0:
-                    # Find ATM in parts
-                    atm_idx = -1
-                    for i, p in enumerate(parts):
-                        if 'ATM' in p.upper():
-                            atm_idx = i
-                            break
-                    
-                    if atm_idx >= 0:
-                        transaction = {
-                            'no': no,
-                            'channel_type': 'ATM',
-                            'terminal_id': parts[atm_idx + 1].strip() if atm_idx + 1 < len(parts) else '',
-                            'terminal_location': parts[atm_idx + 2].strip() if atm_idx + 2 < len(parts) else '',
-                            'sukses': parse_number(parts[atm_idx + 3]) if atm_idx + 3 < len(parts) else 0,
-                            'gagal_sistem_bank': parse_number(parts[atm_idx + 4]) if atm_idx + 4 < len(parts) else 0,
-                            'gagal_nasabah': parse_number(parts[atm_idx + 5]) if atm_idx + 5 < len(parts) else 0,
-                            'gagal_sistem_jalin': parse_number(parts[atm_idx + 6]) if atm_idx + 6 < len(parts) else 0,
-                            'total_transaksi_ditagihkan': parse_number(parts[atm_idx + 7]) if atm_idx + 7 < len(parts) else 0,
-                            'biaya_gross': parse_float(parts[atm_idx + 8]) if atm_idx + 8 < len(parts) else 0,
-                            'proporsi_repay': parse_float(parts[atm_idx + 9]) if atm_idx + 9 < len(parts) else 0,
-                            'repay_nominal': parse_float(parts[atm_idx + 10]) if atm_idx + 10 < len(parts) else 0,
-                        }
-                        if transaction['terminal_id']:
-                            transactions.append(transaction)
-            except (ValueError, IndexError):
+        if len(parts) < 5:
+            parts = line.split(',')
+
+        if len(parts) < 5:
+            continue
+
+        try:
+            # Check if first part is a number (row number), strip BOM just in case
+            no = int(parts[0].strip().lstrip('\ufeff'))
+            if no <= 0:
                 continue
-    
+
+            # Strategy 1: find column containing "ATM" keyword
+            atm_idx = -1
+            for i, p in enumerate(parts):
+                if 'ATM' in p.upper():
+                    atm_idx = i
+                    break
+
+            if atm_idx >= 0 and len(parts) > atm_idx + 10:
+                channel = parts[atm_idx].strip()
+                terminal_id     = parts[atm_idx + 1].strip()
+                terminal_loc    = parts[atm_idx + 2].strip()
+                sukses          = parse_number(parts[atm_idx + 3])
+                gagal_bank      = parse_number(parts[atm_idx + 4])
+                gagal_nasabah   = parse_number(parts[atm_idx + 5])
+                gagal_jalin     = parse_number(parts[atm_idx + 6])
+                total           = parse_number(parts[atm_idx + 7])
+                biaya           = parse_float(parts[atm_idx + 8])
+                proporsi        = parse_float(parts[atm_idx + 9])
+                repay           = parse_float(parts[atm_idx + 10])
+            elif len(parts) >= 10:
+                # Strategy 2: assume fixed column order (No, Channel, TerminalID, Location, ...)
+                channel         = parts[1].strip()
+                terminal_id     = parts[2].strip()
+                terminal_loc    = parts[3].strip()
+                sukses          = parse_number(parts[4])
+                gagal_bank      = parse_number(parts[5])
+                gagal_nasabah   = parse_number(parts[6])
+                gagal_jalin     = parse_number(parts[7])
+                total           = parse_number(parts[8])
+                biaya           = parse_float(parts[9])
+                proporsi        = parse_float(parts[10]) if len(parts) > 10 else 0.0
+                repay           = parse_float(parts[11]) if len(parts) > 11 else 0.0
+            else:
+                continue
+
+            # Validate terminal_id: must be non-empty and start with T + digit
+            if terminal_id and re.match(r'^T\d', terminal_id):
+                transactions.append({
+                    'no': no,
+                    'channel_type': channel if channel else 'ATM',
+                    'terminal_id': terminal_id,
+                    'terminal_location': terminal_loc,
+                    'sukses': sukses,
+                    'gagal_sistem_bank': gagal_bank,
+                    'gagal_nasabah': gagal_nasabah,
+                    'gagal_sistem_jalin': gagal_jalin,
+                    'total_transaksi_ditagihkan': total,
+                    'biaya_gross': biaya,
+                    'proporsi_repay': proporsi,
+                    'repay_nominal': repay,
+                })
+        except (ValueError, IndexError):
+            continue
+
     return transactions, period, bank_code
 
 
