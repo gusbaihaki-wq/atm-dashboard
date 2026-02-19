@@ -162,7 +162,12 @@ def parse_float(value: str) -> float:
         return 0.0
 
 def parse_report_file(content: str) -> tuple:
-    """Parse report file content and extract transactions"""
+    """Parse report file content and extract transactions.
+
+    Supports two file formats:
+    Format A (legacy): No | Channel | TerminalID | Location | Sukses | GagalBank | GagalNasabah | GagalJalin | Total | Biaya | Proporsi | Repay
+    Format B (new):    TerminalID | CodeBank | AcqCode | Sukses | GagalSistem | GagalNasabah | Total | Gross | RepayNominal | Proporsi | Net
+    """
     # Strip BOM and normalize line endings
     content = content.lstrip('\ufeff')
     lines = content.splitlines()
@@ -180,8 +185,7 @@ def parse_report_file(content: str) -> tuple:
         if '008' in line and 'MDR' in line:
             bank_code = "008 - MDR"
 
-    # Parse transaction data
-    # Format: No | Channel | Terminal ID | Location | Sukses | Gagal Bank | Gagal Nasabah | Gagal Jalin | Total | Biaya | Proporsi | Repay
+    auto_no = 0
     for line in lines:
         if not line.strip():
             continue
@@ -196,13 +200,40 @@ def parse_report_file(content: str) -> tuple:
         if len(parts) < 5:
             continue
 
+        col0 = parts[0].strip().lstrip('\ufeff')
+
         try:
-            # Check if first part is a number (row number), strip BOM just in case
-            no = int(parts[0].strip().lstrip('\ufeff'))
+            # ----------------------------------------------------------------
+            # Format B: first column is Terminal ID (starts with T + digit)
+            # TerminalID | CodeBank | AcqCode | Sukses | GagalSist | GagalNas | Total | Gross | RepayNom | Proporsi | Net
+            # ----------------------------------------------------------------
+            if re.match(r'^T\d', col0) and len(parts) >= 8:
+                auto_no += 1
+                transactions.append({
+                    'no': auto_no,
+                    'channel_type': 'ATM',
+                    'terminal_id': col0,
+                    'terminal_location': '',
+                    'sukses':                   parse_number(parts[3]) if len(parts) > 3 else 0,
+                    'gagal_sistem_bank':         parse_number(parts[4]) if len(parts) > 4 else 0,
+                    'gagal_nasabah':             parse_number(parts[5]) if len(parts) > 5 else 0,
+                    'gagal_sistem_jalin':        0,
+                    'total_transaksi_ditagihkan': parse_number(parts[6]) if len(parts) > 6 else 0,
+                    'biaya_gross':               parse_float(parts[7])  if len(parts) > 7 else 0.0,
+                    'repay_nominal':             parse_float(parts[8])  if len(parts) > 8 else 0.0,
+                    'proporsi_repay':            parse_float(parts[9])  if len(parts) > 9 else 0.0,
+                })
+                continue
+
+            # ----------------------------------------------------------------
+            # Format A: first column is a row number (integer)
+            # No | Channel | TerminalID | Location | Sukses | ... | Biaya | Proporsi | Repay
+            # ----------------------------------------------------------------
+            no = int(col0)
             if no <= 0:
                 continue
 
-            # Strategy 1: find column containing "ATM" keyword
+            # Try to find "ATM" keyword to locate channel column
             atm_idx = -1
             for i, p in enumerate(parts):
                 if 'ATM' in p.upper():
@@ -210,34 +241,33 @@ def parse_report_file(content: str) -> tuple:
                     break
 
             if atm_idx >= 0 and len(parts) > atm_idx + 10:
-                channel = parts[atm_idx].strip()
-                terminal_id     = parts[atm_idx + 1].strip()
-                terminal_loc    = parts[atm_idx + 2].strip()
-                sukses          = parse_number(parts[atm_idx + 3])
-                gagal_bank      = parse_number(parts[atm_idx + 4])
-                gagal_nasabah   = parse_number(parts[atm_idx + 5])
-                gagal_jalin     = parse_number(parts[atm_idx + 6])
-                total           = parse_number(parts[atm_idx + 7])
-                biaya           = parse_float(parts[atm_idx + 8])
-                proporsi        = parse_float(parts[atm_idx + 9])
-                repay           = parse_float(parts[atm_idx + 10])
+                channel      = parts[atm_idx].strip()
+                terminal_id  = parts[atm_idx + 1].strip()
+                terminal_loc = parts[atm_idx + 2].strip()
+                sukses       = parse_number(parts[atm_idx + 3])
+                gagal_bank   = parse_number(parts[atm_idx + 4])
+                gagal_nas    = parse_number(parts[atm_idx + 5])
+                gagal_jalin  = parse_number(parts[atm_idx + 6])
+                total        = parse_number(parts[atm_idx + 7])
+                biaya        = parse_float(parts[atm_idx + 8])
+                proporsi     = parse_float(parts[atm_idx + 9])
+                repay        = parse_float(parts[atm_idx + 10])
             elif len(parts) >= 10:
-                # Strategy 2: assume fixed column order (No, Channel, TerminalID, Location, ...)
-                channel         = parts[1].strip()
-                terminal_id     = parts[2].strip()
-                terminal_loc    = parts[3].strip()
-                sukses          = parse_number(parts[4])
-                gagal_bank      = parse_number(parts[5])
-                gagal_nasabah   = parse_number(parts[6])
-                gagal_jalin     = parse_number(parts[7])
-                total           = parse_number(parts[8])
-                biaya           = parse_float(parts[9])
-                proporsi        = parse_float(parts[10]) if len(parts) > 10 else 0.0
-                repay           = parse_float(parts[11]) if len(parts) > 11 else 0.0
+                # Fixed column order fallback
+                channel      = parts[1].strip()
+                terminal_id  = parts[2].strip()
+                terminal_loc = parts[3].strip()
+                sukses       = parse_number(parts[4])
+                gagal_bank   = parse_number(parts[5])
+                gagal_nas    = parse_number(parts[6])
+                gagal_jalin  = parse_number(parts[7])
+                total        = parse_number(parts[8])
+                biaya        = parse_float(parts[9])
+                proporsi     = parse_float(parts[10]) if len(parts) > 10 else 0.0
+                repay        = parse_float(parts[11]) if len(parts) > 11 else 0.0
             else:
                 continue
 
-            # Validate terminal_id: must be non-empty and start with T + digit
             if terminal_id and re.match(r'^T\d', terminal_id):
                 transactions.append({
                     'no': no,
@@ -246,7 +276,7 @@ def parse_report_file(content: str) -> tuple:
                     'terminal_location': terminal_loc,
                     'sukses': sukses,
                     'gagal_sistem_bank': gagal_bank,
-                    'gagal_nasabah': gagal_nasabah,
+                    'gagal_nasabah': gagal_nas,
                     'gagal_sistem_jalin': gagal_jalin,
                     'total_transaksi_ditagihkan': total,
                     'biaya_gross': biaya,
